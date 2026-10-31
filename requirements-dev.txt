@@ -1,0 +1,10 @@
+# 开发依赖（含运行时依赖）
+#
+# 安装：pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+pytest>=7.4
+ruff>=0.4
+mypy>=1.8
+build>=1.0

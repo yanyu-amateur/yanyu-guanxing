@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烟雨江湖 · 本地存档工具</title>
+    <meta name="description" content="烟雨江湖本地存档导入、导出工具与模拟器入口">
+    <link rel="stylesheet" href="./home.css?v=2.1.7">
+</head>
+<body>
+    <main class="home-shell">
+        <header class="home-header">
+            <div class="home-title-row">
+                <h1>观星模拟器</h1>
+            </div>
+            <p>夜观天象，手握星辰，推演江湖万象。</p>
+            <p class="home-qq" style="margin:8px 0 0;font-size:14px;color:#b58cff;">联系方式 · QQ群：1007851964</p>
+        </header>
+
+        <section class="home-grid" aria-label="存档与工具">
+            <section class="home-panel archive-import-panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>数据导入</h2>
+                        <p style="margin:6px 0 0;font-size:13px;opacity:.78;">
+                            选择观星工具导出的 <b>dat.json</b>（明文存档，无需授权码）
+                        </p>
+                    </div>
+                    <strong id="homeSaveStatus" class="status-badge">未导入</strong>
+                </div>
+                <div class="home-main-role"><span>主角</span><strong id="homeMainRole">—</strong></div>
+                <div class="home-actions">
+                    <label class="btn btn-primary" title="选择观星工具导出的明文 dat.json">
+                        <span class="import-txt">导入 dat.json</span>
+                        <input type="file" id="saveFileInput" accept=".json,application/json" hidden>
+                    </label>
+                    <button id="btnResetWebsite" class="btn btn-secondary" type="button">重置网页状态</button>
+                </div>
+                <p id="homeImportMessage" class="home-message" role="status"></p>
+            </section>
+
+        </section>
+
+        <section class="home-panel module-panel" aria-labelledby="moduleTitle">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="moduleTitle">选择板块</h2>
+                </div>
+            </div>
+            <div class="module-grid">
+                <a href="./wash/index.html" class="module-card"><strong>洗髓模拟</strong><span>洗脉、锁脉、保底与置换推演</span></a>
+                <a href="./equip/index.html" class="module-card"><strong>装备模拟</strong><span>打造、升炼、精炼与淬炼</span></a>
+                <a href="./hengshan/index.html" class="module-card"><strong>恒山模拟</strong><span>恒山弟子升级节点与天赋刷新推演</span></a>
+                <a href="./role/index.html" class="module-card"><strong>角色面板</strong><span>查看角色、天赋、装备和属性</span></a>
+                <a href="./auto/index.html" class="module-card"><strong>自动模拟</strong><span>自动洗脉路线与装备批量预测</span></a>
+                <a href="./homestead/index.html" class="module-card"><strong>家园派遣</strong><span>每天 3 次派遣分配，筛选鲁班/天工/木工手记</span></a>
+                <a href="./guishi/index.html" class="module-card"><strong>鬼市千宝阁</strong><span>鬼市货架解析与 08:00 / 20:00 刷新序列推算</span></a>
+
+<a href="./guishi/index.html?page=hs" class="module-card"><strong>恒山游货郎</strong><span>每日 05:00 自动刷新 · 手动 20 元宝（固定 3 次）· 恒 6 格</span></a>
+                <!-- 已停用：置换序列筛选（2026-09-15 关闭入口；页面文件保留，直连会跳回首页） -->
+            </div>
+        </section>
+    </main>
+    <script src="./shared/version.js"></script>
+    <script src="./shared/pako.min.js"></script>
+    <script src="./shared/sql-wasm.js"></script>
+    <script src="./shared/sql-wasm-embed.js"></script>
+    <script src="./shared/save_decrypt.js?v=20261031k"></script>
+    <script src="./local-save.js"></script>
+    <script src="./shared/archive_state.js?v=20261031k"></script>
+    <script src="./shared/page_bridge.js?v=20261031k"></script>
+    <script src="./last-import.js"></script>
+    <script src="./home.js?v=20261031k"></script>
+
+</body>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烟雨江湖 · 家园派遣</title>
+    <meta name="description" content="家园派遣推演：每天 3 次派遣，筛选鲁班 / 天工 / 木工手记">
+    <link rel="stylesheet" href="../shared/simulator.css?v=20261031k">
+    <link rel="stylesheet" href="./homestead.css">
+</head>
+
+<body>
+    <div class="app-container homestead-app">
+        <header class="app-header">
+            <h1>家园派遣</h1>
+            <p class="subtitle">每天 3 次派遣 · 产出由「派谁 + 第几次」决定，拴马桩只决定同时挂几人</p>
+            <nav class="sim-nav">
+                <a href="../index.html">首页</a>
+                <span class="nav-sep">·</span>
+                <a href="../wash/index.html">洗髓模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../equip/index.html">装备模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../hengshan/index.html">恒山模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../guishi/index.html">鬼市千宝阁</a><span class="nav-sep">·</span><a href="../role/index.html">角色面板</a>
+                <span class="nav-sep">·</span>
+                <a href="../auto/index.html">自动模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="./index.html" class="active" aria-current="page">家园派遣</a>
+            </nav>
+        </header>
+
+        <section class="archive-summary" aria-label="存档信息">
+            <div class="archive-summary-info">
+                <div class="archive-summary-item">
+                    <span>存档状态</span>
+                    <strong id="saveStatus">未导入</strong>
+                </div>
+                <div class="archive-summary-item">
+                    <span>主角</span>
+                    <strong id="archiveMainRole">—</strong>
+                </div>
+            </div>
+        </section>
+
+        <p id="importMessage" class="archive-message" role="status"></p>
+
+        <section class="config-panel" id="configPanel" hidden>
+            <div class="config-row config-row-actions">
+                <div class="config-group grow">
+                    <label>选择随从</label>
+                    <div class="select-with-btn">
+                        <select id="roleSelect"></select>
+                        <button id="btnView" class="btn btn-primary" type="button">下次派遣奖励</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-row config-row-actions">
+                <div class="config-group">
+                    <label>推演派遣次数（默认=今日还剩几次，每天上限 3 次）</label>
+                    <div class="stepper">
+                        <button type="button" id="countMinus" class="step-btn">−</button>
+                        <input type="number" id="countInput" min="0" max="20" value="3" class="step-input">
+                        <button type="button" id="countPlus" class="step-btn">＋</button>
+                        <span class="step-hint">0 ~ 20（0 = 今日已派完；调大可跨日推演）</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="bookCalendar" class="book-calendar" hidden></div>
+            <div id="horseCard" class="horse-card" hidden></div>
+
+            <div id="itemPanel" class="item-panel"></div>
+
+            <div id="autoResult" class="auto-result"></div>
+            <p id="predictStatus" class="archive-message" role="status"></p>
+        </section>
+
+        <div id="dispatchModal" class="modal-mask" hidden>
+            <div class="modal-card" role="dialog" aria-modal="true">
+                <div class="modal-head">
+                    <span id="dispatchModalRole"></span>
+                    <button type="button" id="dispatchModalClose" class="modal-close" aria-label="关闭">×</button>
+                </div>
+                <div id="dispatchModalBody" class="modal-body"></div>
+            </div>
+        </div>
+
+        <div id="dispatchEmpty" class="role-empty">导入存档后，选择随从可查看下次派遣奖励；或点选上方「第几次」并选目标物品，下方实时列出每次该派谁</div>
+
+        <footer class="app-footer">
+            <p>数据来源于 <a href="https://wiki.biligame.com/yanyu/" target="_blank" rel="noopener">烟雨江湖 Wiki</a></p>
+        </footer>
+    </div>
+
+    <script src="../shared/pako.min.js"></script>
+    <script src="../shared/save_decrypt.js?v=20261031k"></script>
+    <script src="../shared/archive_state.js?v=20261031k"></script>
+    <script src="../shared/page_bridge.js?v=20261031k"></script>
+    <script src="./wasm_b64.js"></script>
+    <script src="./engine.js"></script>
+    <script src="./dispatch.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-hengshan-view="manual">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烟雨江湖 · 恒山模拟</title>
+    <meta name="description" content="烟雨江湖恒山弟子升级与天赋刷新本地推演（官方内核离线版）">
+    <link rel="stylesheet" href="../shared/simulator.css?v=20261031k">
+    <link rel="stylesheet" href="./hengshan.css">
+    <style>
+        .wasm-loading-overlay { position: fixed; inset: 0; z-index: 99; display: grid; place-items: center; background: rgba(10, 11, 16, 0.88); }
+        .wasm-loading-dialog { max-width: 420px; padding: 1.4rem 1.6rem; border: 1px solid var(--border-accent, #3a2f57); border-radius: 10px; background: var(--bg-primary, #171a22); text-align: center; }
+        .wasm-loading-dialog h2 { margin: 0 0 0.6rem; color: var(--text-primary, #eee); font-family: var(--font-serif, serif); }
+        .wasm-loading-status { margin: 0 0 0.4rem; color: var(--text-secondary, #b8b2a6); }
+        .wasm-loading-detail { margin: 0; color: var(--text-muted, #8a8578); font-size: 0.82rem; }
+    </style>
+</head>
+<body>
+    <div class="app-container hengshan-app">
+        <header class="app-header">
+            <h1>恒山模拟</h1>
+            <p class="subtitle">恒山弟子 · 升级节点 / 天赋刷新 <span id="appVersion" class="app-version">官方内核离线版</span></p>
+            <nav class="sim-nav">
+                <a href="../index.html">首页</a><span class="nav-sep">·</span>
+                <a href="../wash/index.html">洗髓模拟</a><span class="nav-sep">·</span>
+                <a href="../equip/index.html">装备模拟</a><span class="nav-sep">·</span>
+                <a href="../hengshan/index.html" class="active" aria-current="page">恒山模拟</a><span class="nav-sep">·</span>
+                <a href="../guishi/index.html">鬼市千宝阁</a><span class="nav-sep">·</span><a href="../role/index.html">角色面板</a><span class="nav-sep">·</span>
+                <a href="../auto/index.html">自动模拟</a>
+            </nav>
+        </header>
+
+        <section class="archive-summary" aria-label="存档信息">
+            <div class="archive-summary-info">
+                <div class="archive-summary-item"><span>存档状态</span><strong id="saveStatus">未导入</strong></div>
+                <div class="archive-summary-item"><span>主角</span><strong id="archiveMainRole">—</strong></div>
+            </div>
+            <!-- 这里原先有「导入数据 / 导出表格 / 重置网页」三个按钮，已按需求移除：
+                 导入回首页即可，导出在离线版没有实现，重置约等于刷新。 -->
+        </section>
+
+        <main class="hengshan-main">
+            <nav id="tabBar" class="hengshan-tabs" aria-label="恒山工具">
+                <button type="button" class="is-active" data-hengshan-tool="manual">弟子推演</button>
+                <button type="button" data-hengshan-tool="auto">自动推演弟子</button>
+            </nav>
+
+            <div class="hengshan-view" data-hengshan-view="manual">
+            <section class="config-panel">
+                <div class="panel-header">
+                    <div><span class="hengshan-kicker">DISCIPLE SNAPSHOT</span><h2>选择恒山弟子</h2></div>
+                    <button id="btnResetStudent" class="btn btn-reset" type="button" disabled>恢复弟子快照</button>
+                </div>
+                <div class="config-row">
+                    <div class="config-group grow">
+                        <label for="studentSelect">存档弟子</label>
+                        <select id="studentSelect" disabled><option value="">导入含恒山弟子的存档后显示</option></select>
+                    </div>
+                </div>
+                <p id="studentMessage" class="hengshan-message" role="status">当前存档尚未识别到恒山弟子。</p>
+            </section>
+
+            <section id="studentStatePanel" class="config-panel" hidden>
+                <div class="student-state-grid">
+                    <div><span>等级</span><strong id="studentLevel">—</strong></div>
+                    <div><span>经验</span><strong id="studentExp">—</strong></div>
+                    <div><span>每日修炼经验</span><strong id="studentDailyExp">—</strong></div>
+                </div>
+                <div id="studentTalents" class="student-talents"></div>
+            </section>
+
+            <section id="unlockPanel" class="config-panel" hidden>
+                <div class="panel-header">
+                    <div><span class="hengshan-kicker">LEVEL MILESTONE</span><h2>升级推演</h2></div>
+                    <span class="evidence-badge is-verified">官方内核</span>
+                </div>
+                <p class="hengshan-ledger-note">每日修炼经验与升级曲线由官方 Rust 内核离线计算；40 / 80 级节点自动结算赠送天赋。所有操作只推进页面沙盒，导入存档不受影响。</p>
+                <div id="unlockResult" class="unlock-result"></div>
+                <div class="action-buttons">
+                    <button id="btnAdvanceUnlock" class="btn btn-wash-gold" type="button">推进一天并应用</button>
+                </div>
+
+                <div class="day-advance-box">
+                    <h3>连续升级推演</h3>
+                    <p class="hengshan-ledger-note">推演天数留空 = 快进到下一节点（40 / 80 级）或满级，途中自动结算升级获得的赠予天赋。</p>
+                    <div class="config-row refresh-config-row">
+                        <div class="config-group grow">
+                            <label for="dayAdvanceCount">推演天数（留空=到下一节点）</label>
+                            <input id="dayAdvanceCount" type="number" min="0" max="20000" placeholder="留空自动">
+                        </div>
+                    </div>
+                    <div class="day-advance-actions">
+                        <button id="btnDaySimulate" class="btn btn-wash-gold" type="button">开始推演</button>
+                        <button id="btnDayApply" class="btn btn-wash-custom" type="button" disabled>应用结果</button>
+                    </div>
+                    <div id="dayResult" class="day-result" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <section id="refreshPanel" class="config-panel" hidden>
+                <div class="panel-header">
+                    <div><span class="hengshan-kicker">TALENT REPLACEMENT</span><h2>指定槽位刷新</h2></div>
+                    <span class="evidence-badge is-verified">官方内核</span>
+                </div>
+                <div class="config-row refresh-config-row">
+                    <div class="config-group grow">
+                        <label for="refreshSlot">刷新位置</label>
+                        <select id="refreshSlot"></select>
+                    </div>
+                    <div class="config-group">
+                        <label for="refreshAdvanceCount">刷新次数</label>
+                        <input id="refreshAdvanceCount" type="number" min="1" max="1000" value="20">
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button id="btnSimulateRefresh" class="btn btn-wash-custom" type="button">推演刷新序列</button>
+                </div>
+                <p id="refreshSummary" class="hengshan-message">设置次数后批量查看后续结果；点击任一行即可应用到该次推进。</p>
+                <div class="refresh-table-wrap">
+                    <table class="refresh-table">
+                        <thead><tr><th>次数</th><th>抽中天赋</th><th>刷新后组合</th><th>操作</th></tr></thead>
+                        <tbody id="refreshRows"><tr><td colspan="4">尚未推演</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="refresh-history-header">
+                    <h3>本次会话操作记录</h3>
+                    <span id="refreshHistoryCount">0 条</span>
+                </div>
+                <div class="refresh-table-wrap refresh-history-wrap">
+                    <table class="refresh-table refresh-history-table">
+                        <thead><tr><th>操作序号</th><th>刷新槽位</th><th>推进次数</th><th>最终抽中</th><th>应用后组合</th></tr></thead>
+                        <tbody id="refreshHistoryRows"><tr><td colspan="5">暂无操作记录</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+            </div>
+
+            <div class="hengshan-view" data-hengshan-view="auto" hidden>
+            <section id="autoSimPanel" class="config-panel">
+                <div class="panel-header">
+                    <div><span class="hengshan-kicker">DISCIPLE AUTO ROUTE</span><h2>自动推演弟子</h2></div>
+                    <button id="btnAutoSimReset" class="btn btn-reset" type="button">清空规则</button>
+                </div>
+                <p class="hengshan-ledger-note">设定"最多洗几次 + 目标天赋规则"，一键扫描商店候选（默认）或全部弟子；只给出"几级洗哪个槽、洗出什么天赋"的指令卡，凑不齐的直接淘汰、不占结果位。所有洗点由官方内核推算——没命中目标的试洗相当于回档 SL，不消耗次数预算。卡片里可能出现"抽到什么都行"的步骤，它要真花 1 次额度：<b>清障</b>＝目标被身上的同类天赋挡住、得先挪走（默认就会做）；<b>换运</b>＝目标没被挡、但这颗种子等不到，先洗一次换一组新结果（需勾选下方「允许清障 / 换运」，搜得更全但明显更慢）。</p>
+
+                <div class="as-rule-grid">
+                    <div class="config-group as-wash-group">
+                        <label for="asMaxWashes">最多洗几次</label>
+                        <input id="asMaxWashes" type="number" min="1" max="10" value="3">
+                        <span class="as-hint">默认 3，可 1~10</span>
+                    </div>
+                    <div class="config-group grow">
+                        <label>必出（必须出现的天赋）<span class="as-count" id="asMustCount">0</span></label>
+                        <div id="asMustChips" class="as-chips"></div>
+                    </div>
+                    <div class="config-group grow">
+                        <label>备选（M 选 N，N=<input id="asPickN" type="number" min="0" max="3" value="1">）<span class="as-count" id="asPickCount">0 选 1</span></label>
+                        <div id="asPickChips" class="as-chips"></div>
+                    </div>
+                </div>
+
+                <div class="as-mode-bar">
+                    <span>点击下方天赋时的加入目标：</span>
+                    <button id="asModeMust" class="btn is-active" type="button">① 必出</button>
+                    <button id="asModePick" class="btn" type="button">② 备选</button>
+                </div>
+
+                <div class="as-tool-row">
+                    <input id="asFilter" class="as-filter" type="search" placeholder="搜索天赋名（如：一臂之力）">
+                    <select id="asScope" class="as-scope">
+                        <option value="shop">扫描范围：商店候选</option>
+                        <option value="all">扫描范围：全部弟子</option>
+                        <option value="enrolled">扫描范围：在册弟子</option>
+                    </select>
+                    <button id="btnAutoSimRun" class="btn btn-wash-gold" type="button">开始扫描</button>
+                </div>
+                <label class="as-check"><input id="asSkipMax" type="checkbox" checked> 跳过已满级（100 级）弟子</label>
+                <label class="as-check"><input id="asAllowSwap" type="checkbox"> 允许清障 / 换运（搜得更全，但明显更慢；那一步要真花 1 次洗的额度）</label>
+                <p id="asRuleSummary" class="hengshan-message"></p>
+                <p id="asValidate" class="hengshan-message"></p>
+
+                <div id="asTalentGrid" class="as-grid"></div>
+
+                <div id="asProgress" class="as-progress" aria-live="polite"></div>
+                <div id="asResults" class="as-results"></div>
+            </section>
+            </div>
+        </main>
+
+        <footer class="app-footer"><p>数据来源于 <a href="https://wiki.biligame.com/yanyu/" target="_blank" rel="noopener">烟雨江湖 Wiki</a> · 恒山算法内核离线运行，无网络请求</p></footer>
+    </div>
+    <script src="../shared/hengshan_engine_b64.js"></script>
+    <script src="../shared/hengshan_talent_data.js"></script>
+    <script src="../shared/hengshan_shop_data.js"></script>
+    <script src="../shared/hengshan_offline_boot.js"></script>
+    <script src="../shared/algorithm_wasm_bridge.js"></script>
+    <script src="../shared/wasm_algorithm_api.js"></script>
+    <script src="../shared/pako.min.js"></script>
+    <script src="../shared/sql-wasm.js"></script>
+    <script src="../shared/sql-wasm-embed.js"></script>
+    <script src="../shared/save_decrypt.js?v=20261031k"></script>
+    <script src="../shared/archive_state.js?v=20261031k"></script>
+    <script src="../shared/page_bridge.js?v=20261031k"></script>
+    <script src="./hengshan.js?v=20260921a"></script>
+    <script src="./hengshan_day_advance.js"></script>
+    <script src="./hengshan_auto_sim.js"></script>
+    <script src="./hengshan_shop_view.js"></script>
+</body>
+</html>

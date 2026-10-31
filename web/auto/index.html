@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烟雨江湖 · 自动模拟</title>
+    <meta name="description" content="烟雨江湖洗髓模拟器 - 模拟天赋洗髓概率，支持锁定、保底、统计分析">
+    <link rel="stylesheet" href="./style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="./app.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1 id="simulatorPageTitle">自动模拟</h1>
+            <p class="subtitle"><span id="simulatorPageSubtitle">烟雨江湖 · 本地存档模拟</span></p>
+            <nav class="sim-nav">
+                <a href="../index.html">首页</a>
+                <span class="nav-sep">·</span>
+                <a href="../wash/index.html">洗髓模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../equip/index.html">装备模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../hengshan/index.html">恒山模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../role/index.html">角色面板</a>
+                <span class="nav-sep">·</span>
+                <a href="../auto/index.html" class="active" aria-current="page">自动模拟</a>
+            </nav>
+        </header>
+
+        <section class="archive-summary" aria-label="存档信息">
+            <div class="archive-summary-info">
+                <div class="archive-summary-item">
+                    <span>存档状态</span>
+                    <strong id="saveStatus">未导入</strong>
+                </div>
+                <div class="archive-summary-item">
+                    <span>主角</span>
+                    <strong id="archiveMainRole">—</strong>
+                </div>
+            </div>
+
+        </section>
+<section id="simulatorConfigPanel" class="config-panel">
+            <input type="hidden" id="modeSelect" value="seed">
+
+            <div id="saveRoleRow" class="config-row role-row" hidden>
+                <div class="config-group grow role-select-group">
+                    <label>存档角色</label>
+                    <div class="select-with-btn">
+                        <select id="saveRoleSelect">
+                            <option value="">请选择角色</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="config-group bag-group">
+                    <span class="bag-label">背包洗髓丹</span>
+                    <span id="bagPillDisplay" class="bag-value">--</span>
+                </div>
+            </div>
+
+            <div class="config-row">
+                <div class="config-group">
+                    <label>资质等级</label>
+                    <select id="zizhiSelect">
+                        <option value="150">资质平平（0 槽）</option>
+                        <option value="151">资质过人（1 槽）</option>
+                        <option value="152">武林俊杰（2 槽）</option>
+                        <option value="153" selected>绝世奇才（3 槽）</option>
+                        <option value="154">空前绝后（4 槽）</option>
+                    </select>
+                </div>
+                <div class="config-group">
+                    <label>VIP</label>
+                    <select id="vipSelect">
+                        <option value="0">无</option>
+                        <option value="1" selected>VIP 1+</option>
+                        <option value="2">VIP 2+</option>
+                    </select>
+                    <p id="vipImpactHint" class="vip-impact-hint">VIP 1+：开放九阴鬼脉、玄阳神脉、混元奇脉、一心两用等；仍需满足角色类别、资质等其他条件；VIP 不改变丹耗或保底。</p>
+                </div>
+            </div>
+
+            <div id="zizhiPanel" class="zizhi-panel">
+                <div class="zz-stats">
+                    <span class="zz-pill">臂力 <b id="zzStr">0</b></span>
+                    <span class="zz-pill">根骨 <b id="zzCon">0</b></span>
+                    <span class="zz-pill">身法 <b id="zzDex">0</b></span>
+                    <span class="zz-pill">内息 <b id="zzInt">0</b></span>
+                    <span class="zz-pill total">总计 <b id="zzTotal">0</b></span>
+                </div>
+                <button id="btnUpgradeZiZhi" class="btn-upgrade-zz" type="button">提升资质</button>
+            </div>
+
+            <div class="config-row dlc-row" id="dlcRow" style="display:none;">
+                <div class="config-group">
+                    <label class="dlc-label">
+                        <input type="checkbox" id="dlcModeCheck" class="dlc-check">
+                        <span>DLC 300 保底紫</span>
+                    </label>
+                    <span class="dlc-hint">勾选后按 DLC 版本序列：幸运值 ≥ 300 保底紫</span>
+                </div>
+            </div>
+
+            <div id="seedControls" class="sr-only" aria-hidden="true">
+                <input type="number" id="seedInput" value="2000548318">
+                <input type="number" id="luckSeedInput" value="">
+                <input type="number" id="roleIdInput" value="10044">
+                <input type="number" id="saltInput" value="278440">
+            </div>
+        </section>
+
+        <main class="main-content">
+            <section class="talent-display wash-simulator-only">
+                <div class="section-title">
+                    <span class="section-heading">当前天赋</span>
+                </div>
+                <p class="talent-tip">同类型低阶在前、紫脉在后时显示「!」与置换；置换走欧气紫池，不耗丹、不推进洗髓种子。</p>
+                <div id="talentSlots" class="talent-slots"></div>
+            </section>
+
+            <section class="action-panel wash-simulator-only">
+                <div class="action-buttons">
+                    <button id="btnWashOnce" class="btn btn-wash" type="button">洗髓</button>
+                    <button id="btnWashUntilGold" class="btn btn-wash-gold" type="button">洗到出紫</button>
+                </div>
+                <div class="action-custom-row">
+                    <div class="custom-wash-group">
+                        <label>指定连洗条数：</label>
+                        <input type="number" id="customWashInput" min="1" max="1000" value="10">
+                        <button id="btnWashCustom" class="btn btn-wash-custom" type="button">连洗 <span id="customWashNum">10</span> 次</button>
+                    </div>
+                    <button id="btnAnalyzePurple" class="btn btn-analyze-purple" type="button">当前序列的置换序列</button>
+                </div>
+                <div class="pity-bar">
+                    <div class="pity-label">保底进度</div>
+                    <div class="pity-track">
+                        <div id="pityFill" class="pity-fill" style="width: 0%"></div>
+                    </div>
+                    <div id="pityText" class="pity-text">0 / 850</div>
+                </div>
+                <div class="cost-info">
+                    <span id="costInfo">每次消耗：洗髓丹 ×3</span>
+                </div>
+
+                <div id="nextConflictPanel" class="next-conflict-panel">
+                    <div class="next-conflict-head">
+                        <span class="next-conflict-title">洗到下一紫 · 最近冲突脉</span>
+                        <span class="next-conflict-from">
+                            从脉序
+                            <input type="number" id="nextConflictAfterWash" min="0" value="0" />
+                            之后
+                        </span>
+                        <button id="btnFindNextConflict" class="btn btn-wash-custom" type="button">查找</button>
+                        <button id="btnNextConflictFromCurrent" class="btn btn-wash-custom" type="button">从当前进度</button>
+                    </div>
+                    <div id="nextConflictResult" class="next-conflict-result">
+                        <span class="text-muted">查下一紫及其最近冲突脉，可一键洗到冲突并锁定，再洗到紫脉。注意：锁脉后保底紫可能偏离未锁预测（与游戏一致）</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="config-panel auto-mode-switcher auto-simulator-only" aria-label="自动模拟类型">
+                <div class="auto-mode-tabs" role="tablist" aria-label="自动模拟类型">
+                    <button id="btnAutoEquipMode" class="auto-mode-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="autoEquipModePanel">装备模拟</button>
+                    <button id="btnAutoJianwangMode" class="auto-mode-tab" type="button" role="tab" aria-selected="false" aria-controls="autoJianwangModePanel">剑王阁</button>
+                    <button id="btnAutoWashMode" class="auto-mode-tab" type="button" role="tab" aria-selected="false" aria-controls="autoWashModePanel">自动洗脉</button>
+                </div>
+            </section>
+
+            <section id="aiPredictionPanel" class="ai-prediction-panel auto-simulator-only" aria-labelledby="aiPredictionTitle">
+                <div class="section-title ai-prediction-title-row">
+                    <div>
+                        <span class="ai-kicker">LOCAL EQUIPMENT OPTIMIZER</span>
+                        <h2 id="aiPredictionTitle" class="section-heading">自动模拟 · 装备批量预测</h2>
+                    </div>
+                    <span class="ai-local-note">本地计算</span>
+                </div>
+                <p class="ai-prediction-intro">选择地点、图纸、属性和首次打造材料。系统将每个材料分支从同一份存档快照独立起跑，筛选紫装并分析精炼；后续芒晶洗练在单件装备详情中手动模拟。</p>
+
+                <div id="autoWashModePanel" class="auto-mode-panel anchor-auto-mode-panel" role="tabpanel" aria-labelledby="btnAutoWashMode" hidden></div>
+
+                <div id="autoEquipModePanel" class="auto-mode-panel equip-auto-panel" role="tabpanel" aria-labelledby="btnAutoEquipMode">
+                    <div class="equip-auto-snapshot-note">
+                        <strong>独立存档分支</strong>
+                        <span>每个“地点 × 图纸 × 首次材料”都从本次导入的原始打造状态开始；同一分支内才连续推进打造序列。</span>
+                    </div>
+
+                    <details class="equip-auto-section" open>
+                        <summary class="equip-auto-section-head">
+                            <div><span>01</span><strong>选择打造地点</strong></div>
+                            <span id="autoEquipLocationCount" class="ai-target-count">已选 0</span>
+                        </summary>
+                        <div class="equip-auto-location-toolbar">
+                            <label for="autoEquipLocationFilter">地点分类</label>
+                            <select id="autoEquipLocationFilter">
+                                <option value="all">显示所有</option>
+                                <option value="blacksmith" selected>只显示铁匠</option>
+                                <option value="embroidery">只显示绣庄</option>
+                            </select>
+                        </div>
+                        <div id="autoEquipLocationChoices" class="equip-auto-choice-grid" role="group" aria-label="选择打造地点">
+                            <span class="text-muted">装备表加载后显示打造地点</span>
+                        </div>
+                    </details>
+
+                    <details class="equip-auto-section" open>
+                        <summary class="equip-auto-section-head">
+                            <div><span>02</span><strong>选择图纸与附加材料</strong></div>
+                            <span id="autoEquipPaperCount" class="ai-target-count">已选 0</span>
+                        </summary>
+                        <div class="ai-target-toolbar equip-auto-paper-toolbar">
+                            <label for="autoEquipPaperSearch">筛选图纸</label>
+                            <input type="search" id="autoEquipPaperSearch" placeholder="输入装备或图纸名称" autocomplete="off">
+                        </div>
+                        <div id="autoEquipPaperChoices" class="equip-auto-paper-list" role="group" aria-label="选择图纸">
+                            <span class="text-muted">先选择至少一个打造地点</span>
+                        </div>
+                        <p class="equip-auto-help">每张图纸可多选首次打造材料；每种材料会形成一条独立打造分支，未选材料则按普通打造计算。</p>
+                    </details>
+
+                    <details class="equip-auto-section" open>
+                        <summary class="equip-auto-section-head">
+                            <div><span>03</span><strong>选择目标精炼属性</strong></div>
+                            <span id="autoEquipPropertyCount" class="ai-target-count">已选 0</span>
+                        </summary>
+                        <div id="autoEquipPropertyChoices" class="equip-auto-choice-grid equip-auto-property-grid" role="group" aria-label="选择精炼属性"></div>
+                    </details>
+
+                    <details class="equip-auto-section equip-auto-settings" open>
+                        <summary class="equip-auto-section-head">
+                            <div><span>04</span><strong>模拟次数</strong></div>
+                        </summary>
+                        <div class="ai-settings-grid">
+                            <label>每分支打造
+                                <input type="number" id="autoEquipCraftCount" min="1" max="5000" value="100">
+                                <span>次</span>
+                            </label>
+                            <label>每属性精炼
+                                <input type="number" id="autoEquipRefineCount" min="1" max="1000" value="500">
+                                <span>次</span>
+                            </label>
+                            <label>盲晶洗练
+                                <input type="number" id="autoEquipAttachCount" min="1" max="5000" value="50">
+                                <span>次</span>
+                            </label>
+                        </div>
+                        <p>只对紫装继续分析；精炼固定使用升炼后的 100 级装备。盲晶洗练默认按「升炼后」阶段批量预测，结果为每个候选装备自动带出最高值及所在次数，无需逐个展开手动模拟；展开候选后仍可切换升炼前/后或调整次数重算。多个目标属性各自从装备原始精炼状态独立分析，不能把不同属性方案串联执行。</p>
+                    </details>
+
+                    <div id="autoEquipSelectionMessage" class="ai-selection-message" aria-live="polite"></div>
+                    <div class="ai-search-actions">
+                        <button id="btnAutoEquipPredict" class="btn btn-ai-predict" type="button">开始装备自动模拟</button>
+                        <button id="btnAutoEquipCancel" class="btn btn-reset" type="button" hidden>取消计算</button>
+                    </div>
+                    <div id="autoEquipProgress" class="ai-search-progress" hidden aria-live="polite">
+                        <div class="ai-progress-head">
+                            <span id="autoEquipProgressText">准备计算…</span>
+                            <b id="autoEquipProgressPercent">0%</b>
+                        </div>
+                        <div class="ai-progress-track"><div id="autoEquipProgressFill" class="ai-progress-fill"></div></div>
+                    </div>
+                    <div id="autoEquipResults" class="ai-prediction-results equip-auto-results" aria-live="polite">
+                        <div class="ai-result-empty">选择地点、图纸和目标属性后开始本地计算。结果将按地点分组、按打造次数排列，并显示属性最高值和材料消耗。</div>
+                    </div>
+                </div>
+
+                <div id="autoJianwangModePanel" class="auto-mode-panel jianwang-auto-panel" role="tabpanel" aria-labelledby="btnAutoJianwangMode" hidden>
+                    <div class="equip-auto-snapshot-note">
+                        <strong>只读推演</strong>
+                        <span>从你选中的剑王阁实物起跑；若没有实物但存档存在 RedSeeds[5707]，可由虚拟首剑起跑。搜索只推进沙盒状态，不修改导入存档、装备页模拟背包或真实 RedSeed。</span>
+                    </div>
+
+                    <div class="jianwang-auto-config-grid">
+                        <label>起始剑
+                            <select id="autoJianwangStartSword">
+                                <option value="">导入存档后显示</option>
+                            </select>
+                        </label>
+                        <label>90级镇派路线
+                            <select id="autoJianwangRoute">
+                                <option value="">请选择</option>
+                            </select>
+                        </label>
+                        <label>词条
+                            <select id="autoJianwangTargetProp">
+                                <option value="">先选择镇派路线</option>
+                            </select>
+                        </label>
+                        <label>筛选目标
+                            <select id="autoJianwangTargetCount">
+                                <option value="tail3" selected>后3词条相同（词条2/3/4）</option>
+                                <option value="any3">任意3个词条</option>
+                            </select>
+                        </label>
+                        <label>最大模拟新剑把数
+                            <input type="number" id="autoJianwangMaxSwords" min="1" max="100000" value="500">
+                        </label>
+                    </div>
+
+                    <p id="autoJianwangStartHint" class="equip-auto-help">会按当前起始剑实际阶段进入流程：60～80级继续升阶，90级同路线先重铸到底、不同路线直接碎剑，100级直接碎神兵。</p>
+                    <div id="autoJianwangSelectionMessage" class="ai-selection-message" aria-live="polite"></div>
+                    <div class="ai-search-actions">
+                        <button id="btnAutoJianwangPredict" class="btn btn-ai-predict" type="button">开始剑王阁自动模拟</button>
+                        <button id="btnAutoJianwangCancel" class="btn btn-reset" type="button" hidden>取消计算</button>
+                    </div>
+                    <div id="autoJianwangProgress" class="ai-search-progress" hidden aria-live="polite">
+                        <div class="ai-progress-head">
+                            <span id="autoJianwangProgressText">准备计算…</span>
+                            <b id="autoJianwangProgressPercent">0%</b>
+                        </div>
+                        <div class="ai-progress-track"><div id="autoJianwangProgressFill" class="ai-progress-fill"></div></div>
+                    </div>
+                    <div id="autoJianwangResults" class="ai-prediction-results jianwang-auto-results" aria-live="polite">
+                        <div class="ai-result-empty">选择起始剑、镇派路线、1～2个指定词条、筛选目标和最大模拟次数后开始搜索。</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="stats-panel wash-simulator-only">
+                <div class="section-title">
+                    <span class="section-heading">统计</span>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="statTotalWash">0</div>
+                        <div class="stat-label">洗髓次数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="statTotalPills">0</div>
+                        <div class="stat-label">洗髓丹消耗</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value purple" id="statGoldCount">0</div>
+                        <div class="stat-label">出紫次数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="statPityCount">0</div>
+                        <div class="stat-label">保底触发</div>
+                    </div>
+                </div>
+                <div class="stats-detail">
+                    <div class="quality-stats">
+                        <div class="quality-bar">
+                            <span class="quality-label q1">白</span>
+                            <div class="quality-track"><div id="barQ1" class="quality-fill q1" style="width:0%"></div></div>
+                            <span class="quality-count" id="countQ1">0</span>
+                        </div>
+                        <div class="quality-bar">
+                            <span class="quality-label q2">绿</span>
+                            <div class="quality-track"><div id="barQ2" class="quality-fill q2" style="width:0%"></div></div>
+                            <span class="quality-count" id="countQ2">0</span>
+                        </div>
+                        <div class="quality-bar">
+                            <span class="quality-label q3">蓝</span>
+                            <div class="quality-track"><div id="barQ3" class="quality-fill q3" style="width:0%"></div></div>
+                            <span class="quality-count" id="countQ3">0</span>
+                        </div>
+                        <div class="quality-bar">
+                            <span class="quality-label q4">紫</span>
+                            <div class="quality-track"><div id="barQ4" class="quality-fill q4" style="width:0%"></div></div>
+                            <span class="quality-count" id="countQ4">0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="history-panel wash-simulator-only">
+                <div class="section-title history-title">
+                    <span class="section-heading">洗髓记录</span>
+                    <div class="section-actions">
+                        <button id="btnExportLog" class="btn-text" type="button">导出</button>
+                        <button id="btnClearLog" class="btn-text" type="button">清空</button>
+                    </div>
+                </div>
+                <div id="historyLog" class="history-log">
+                    <div class="log-empty">尚未开始洗髓</div>
+                </div>
+                <div id="historyPager" class="pager-bar" hidden>
+                    <button type="button" id="btnHistoryPrev" class="btn btn-reset">上一页</button>
+                    <span id="historyPagerInfo" class="meta-text">—</span>
+                    <button type="button" id="btnHistoryNext" class="btn btn-reset">下一页</button>
+                    <label class="pager-size">每页
+                        <select id="historyPageSize">
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                        </select>
+                    </label>
+                </div>
+            </section>
+        </main>
+
+        <div id="purpleModal" class="modal-overlay wash-simulator-only" hidden>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>后续保底紫预览</h2>
+                    <button id="btnClosePurpleModal" class="modal-close-btn" type="button">&times;</button>
+                </div>
+                <div class="modal-body purple-reader-body">
+                    <p class="modal-tip">以当前页面状态为起点（假设洗髓丹管够、继续连洗），直接显示接下来会出现的保底紫。默认 10 条，最多 30。</p>
+                    <div class="purple-reader-toolbar">
+                        <label for="purpleModalCountInput">条数</label>
+                        <input type="number" id="purpleModalCountInput" class="purple-reader-count" min="1" max="30" value="10">
+                    </div>
+                    <div id="purpleModalStatus" class="exchange-sequence-status"></div>
+                    <div id="purpleModalMeta" class="exchange-seq-meta"></div>
+                    <div id="purpleModalGrid" class="exchange-seq-grid-wrap"></div>
+                </div>
+                <div class="modal-footer">
+                    <button id="btnRefreshPurpleModal" class="btn btn-wash-gold" type="button">重新推演</button>
+                </div>
+            </div>
+        </div>
+
+        <footer class="app-footer">
+            <p>数据来源于 <a href="https://wiki.biligame.com/yanyu/" target="_blank" rel="noopener">烟雨江湖 Wiki</a></p>
+        </footer>
+    </div>
+
+
+    <script src="../shared/data.js"></script>
+    <script src="../shared/equip_data.js"></script>
+    <script src="../shared/wasm_data.js"></script>
+    <script src="../shared/core_glue.js"></script>
+    <script src="../shared/wash_source_engine.js?v=20260923fix3"></script>
+    <script src="../shared/wash_engine_registry.js?v=20260929shen1"></script>
+    <script src="../shared/equip_auto_optimizer.js"></script>
+    <script src="../shared/jianwang_auto_optimizer.js"></script>
+    <script src="../shared/anchor_route_planner.js?v=20261006firstlock1"></script>
+    <script src="../shared/anchor_route_worker_bundle.js?v=20261006firstlock1"></script>
+    <script src="../shared/anchor_route_ui.js?v=20261006firstlock1"></script>
+    <script src="../shared/pako.min.js"></script>
+    <script src="../shared/sql-wasm.js"></script>
+    <script src="../shared/sql-wasm-embed.js"></script>
+    <script src="../shared/save_decrypt.js?v=20261031k"></script>
+    <script src="../shared/archive_state.js?v=20261031k"></script>
+    <script src="../shared/page_bridge.js?v=20261031k"></script>
+    <script src="../shared/simulator.js?v=20260930fix1"></script>
+    <script>
+    (function () {
+        function diagnose() {
+            try {
+                var res = (performance.getEntriesByType && performance.getEntriesByType('resource')) || [];
+                var hit = res.filter(function (r) { return /wash_engine_registry|wash_source_engine|simulator|international_wash/.test(r.name); });
+                console.error('[原始脉序诊断] 关键脚本资源加载情况：', hit.map(function (r) {
+                    return r.name.split('/').pop() + ' => size=' + (r.transferSize || 0) + 'B dur=' + Math.round(r.duration || 0) + 'ms';
+                }));
+            } catch (e) { console.error('[原始脉序诊断] 资源读取失败', e); }
+        }
+        if (typeof window.WashEngineRegistry === 'undefined') {
+            console.error('[原始脉序] WashEngineRegistry 未加载，正在尝试不带缓存重新加载 registry 脚本…');
+            diagnose();
+            var b = document.createElement('div');
+            b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:8px 12px;font-size:13px;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.3)';
+            b.textContent = '⚠ 先行服洗脉引擎脚本未正常加载（WashEngineRegistry 缺失）。「原始脉序」的先行服算法将不可用，且不会用正式服冒充。请按 Ctrl+F5 强制刷新；若反复出现，看控制台「原始脉序诊断」';
+            document.body.appendChild(b);
+            var s = document.createElement('script');
+            s.src = '../shared/wash_engine_registry.js?t=' + Date.now();
+            s.onload = function () {
+                if (typeof window.WashEngineRegistry !== 'undefined') {
+                    try { window.WashEngineRegistry.selectForProfile(); console.warn('[原始脉序] registry 重试加载成功，已 selectForProfile'); if (b.parentNode) b.parentNode.removeChild(b); }
+                    catch (e) { console.error('[原始脉序] selectForProfile 失败', e); }
+                } else { console.error('[原始脉序] registry 脚本已加载但未定义 WashEngineRegistry'); }
+            };
+            s.onerror = function () { console.error('[原始脉序] registry 脚本重试也加载失败，请检查文件路径/是否被拦截'); };
+            document.head.appendChild(s);
+        }
+    })();
+    </script>
+</body>
+</html>

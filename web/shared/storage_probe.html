@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>storage probe</title>
+</head>
+<body>
+<script>
+/* 判断「同站其它 html 能不能读到我这份 localStorage」。
+ * Chrome/Edge 的 file:// 所有文件同源 → 能读；
+ * Firefox 默认 privacy.file_unique_origin → 每个文件独立源 → 读不到。
+ * 结果回给宿主，宿主据此决定用原生跳转还是 iframe 叠层。
+ */
+(function () {
+    var seen = null;
+    try { seen = localStorage.getItem('yyjh_probe_v1'); } catch (e) { seen = 'THROW'; }
+    try {
+        window.parent.postMessage({ type: 'gx-probe', seen: seen }, '*');
+    } catch (e) { }
+})();
+</script>
+</body>
+</html>

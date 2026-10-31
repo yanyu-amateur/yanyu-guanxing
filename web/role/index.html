@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烟雨江湖 · 角色面板</title>
+    <meta name="description" content="烟雨江湖角色数值面板：四维、天赋、装备与战斗附加">
+    <link rel="stylesheet" href="../shared/simulator.css?v=20261031k">
+    <link rel="stylesheet" href="./role.css">
+</head>
+<body>
+    <div class="app-container role-app">
+        <header class="app-header">
+            <h1>角色面板</h1>
+            <p class="subtitle">烟雨江湖 · 存档角色数值一览</p>
+            <nav class="sim-nav">
+                <a href="../index.html">首页</a>
+                <span class="nav-sep">·</span>
+                <a href="../wash/index.html">洗髓模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../equip/index.html">装备模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../hengshan/index.html">恒山模拟</a>
+                <span class="nav-sep">·</span>
+                <a href="../guishi/index.html">鬼市千宝阁</a><span class="nav-sep">·</span><a href="../role/index.html" class="active" aria-current="page">角色面板</a>
+                <span class="nav-sep">·</span>
+                <a href="../auto/index.html">自动模拟</a>
+            </nav>
+        </header>
+
+        <section class="archive-summary" aria-label="存档信息">
+            <div class="archive-summary-info">
+                <div class="archive-summary-item">
+                    <span>存档状态</span>
+                    <strong id="saveStatus">未导入</strong>
+                </div>
+                <div class="archive-summary-item">
+                    <span>主角</span>
+                    <strong id="archiveMainRole">—</strong>
+                </div>
+            </div>
+
+        </section>
+<section class="config-panel">
+            <div class="config-row" id="roleSelectRow" hidden>
+                <div class="config-group grow">
+                    <label>角色</label>
+                    <div class="select-with-btn">
+                        <select id="roleSelect">
+                            <option value="">请先导入存档</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="config-group grow">
+                    <label>筛选</label>
+                    <input type="search" id="roleFilter" placeholder="名称 / ID / 标签" autocomplete="off">
+                </div>
+            </div>
+        </section>
+
+        <div id="roleEmpty" class="role-empty">导入存档后选择角色，查看四维、天赋、穿戴与战斗附加数值</div>
+
+        <div id="rolePanel" class="role-panel" hidden>
+            <section class="role-hero history-panel">
+                <div class="panel-header">
+                    <h2 id="roleName">—</h2>
+                    <span id="roleTag" class="meta-text"></span>
+                </div>
+                <div id="roleIdentity" class="stat-grid identity-grid"></div>
+            </section>
+
+            <section class="history-panel">
+                <div class="panel-header">
+                    <h2>最终属性</h2>
+                    <span class="meta-text">底数 + 装备 + 内功/套路 + 经脉 + 秘技(技艺) + 合道 + 天赋</span>
+                </div>
+                <div id="roleFinal" class="stat-grid final-grid"></div>
+            </section>
+
+            <section class="history-panel">
+                <div class="panel-header">
+                    <h2>四维明细</h2>
+                    <span class="meta-text">面板总值=不衰减；溢出衰减=战斗底数用（加点超等级+溢出上限时衰减）</span>
+                </div>
+                <div id="roleAttrs" class="attr-table-wrap"></div>
+            </section>
+
+            <section class="history-panel">
+                <div class="panel-header">
+                    <h2>修为</h2>
+                    <span class="meta-text">WXXW（上限1500）× 0.025 × 系潜力 = 加成%；影响气血/攻击/招架/闪避/速度/聚气</span>
+                </div>
+                <div id="roleXiuwei" class="attr-table-wrap"></div>
+            </section>
+
+            <section class="history-panel">
+                <div class="panel-header">
+                    <h2>战斗附加</h2>
+                    <span class="meta-text">存档 Ext*：剧情/活动永久加值，已计入面板总属性，游戏不单独列出</span>
+                </div>
+                <div id="roleCombat" class="stat-grid combat-grid"></div>
+            </section>
+
+            <section class="history-panel">
+                <div class="panel-header">
+                    <h2>兵器潜力</h2>
+                    <span class="meta-text">拳刀剑棍 / 内功 / 轻功礼包档</span>
+                </div>
+                <div id="roleWeaponGifts" class="stat-grid combat-grid"></div>
+            </section>
+
+            <section class="history-panel">
+                <div class="panel-header">
+                    <h2>天赋</h2>
+                    <span id="talentMeta" class="meta-text"></span>
+                </div>
+                <div id="roleTalents" class="talent-list"></div>
+            </section>
+
+            <section class="history-panel">
+                <div class="panel-header">
+                    <h2>已穿戴</h2>
+                    <span id="equipMeta" class="meta-text"></span>
+                </div>
+                <div class="table-wrap">
+                    <table class="role-table">
+                        <thead>
+                            <tr>
+                                <th>部位</th><th>名称</th><th>品质</th><th>淬炼</th><th>主属性</th><th>附加属性</th>
+                            </tr>
+                        </thead>
+                        <tbody id="roleEquips">
+                            <tr><td colspan="6" class="empty-row">—</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <footer class="app-footer">
+            <p>数据来源于 <a href="https://wiki.biligame.com/yanyu/" target="_blank" rel="noopener">烟雨江湖 Wiki</a></p>
+        </footer>
+    </div>
+
+
+    <script src="../shared/data.js"></script>
+    <script src="../shared/born_talent_data.js"></script>
+    <script src="../shared/battle_talent_data.js"></script>
+    <script src="../shared/life_hedao_data.js"></script>
+    <script src="../shared/extra_attr_data.js"></script>
+    <script src="../shared/equip_data.js"></script>
+    <script src="../shared/kongfu_data.js"></script>
+    <script src="../shared/wasm_data.js"></script>
+    <script src="../shared/core_glue.js"></script>
+    <script src="../shared/pako.min.js"></script>
+    <script src="../shared/sql-wasm.js"></script>
+    <script src="../shared/sql-wasm-embed.js"></script>
+    <script src="../shared/save_decrypt.js?v=20261031k"></script>
+    <script src="../shared/archive_state.js?v=20261031k"></script>
+    <script src="../shared/page_bridge.js?v=20261031k"></script>
+    <script src="role.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "guanxing"
+# 版本号只写在 src/guanxing/__init__.py
+dynamic = ["version"]
+description = "观星工具 —— 存档抓包/本地解密"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
+authors = [{ name = "yanyu-amateur" }]
+keywords = ["save", "xxtea", "har", "android"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: Microsoft :: Windows",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "pydantic>=2.5,<3",
+    "xxtea>=6.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "build>=1.0",
+]
+
+[project.scripts]
+guanxing = "guanxing.interface.cli.app:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.dynamic]
+version = { attr = "guanxing.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+guanxing = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "T20"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/guanxing/infra/reporting/*" = ["T20"]
+"src/guanxing/interface/cli/interactive/*" = ["T20"]
+"tests/*" = ["T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["guanxing"]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = ["typings"]
+warn_unused_ignores = true
+ignore_missing_imports = true
+files = ["src/guanxing"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ['error::DeprecationWarning:guanxing\..*']
+

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<script>
+/* 2026-09-15：本页已停用、入口关闭；直接输入地址访问会立即跳回首页。 */
+location.replace('./index.html');
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>置换序列筛选</title>
+<style>
+    :root {
+        --bg: #14121c; --panel: #1e1a2a; --border: #3f3155;
+        --purple: #8a5fd0; --purple-bright: #b58cff;
+        --text: #e8e2f4; --text-dim: #9a8fb0;
+        --green: #6fd074; --red: #ff7b7b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+        font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; line-height: 1.6; }
+    .container { max-width: 920px; margin: 0 auto; }
+    h1 { font-size: 1.4rem; color: var(--purple-bright); margin: 0 0 6px; }
+    .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 20px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+    .card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--purple-bright); }
+    .dropzone { border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center;
+        color: var(--text-dim); cursor: pointer; transition: all 0.2s; }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--purple); color: var(--text); background: rgba(138,95,208,0.06); }
+    .dropzone.loaded { border-style: solid; border-color: var(--green); color: var(--green); }
+
+    .step { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #16121f; }
+    .step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .step-head .step-title { font-weight: 600; color: var(--purple-bright); }
+    .step-head .step-order { display: inline-flex; align-items: center; gap: 4px; }
+    .step-head .step-order button { cursor: pointer; background: transparent; border: 1px solid var(--border);
+        color: var(--text-dim); border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; }
+    .step-head select.step-type { padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px;
+        background: #201a30; color: var(--text); font-size: 0.85rem; }
+    .step-head .step-del { cursor: pointer; color: var(--red); margin-left: auto; font-size: 1.1rem; }
+
+    .step-body { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .step-body select.purple { padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px;
+        background: #201a30; color: var(--text); font-size: 0.85rem; width: 140px; }
+    .step-body .m-label { color: var(--text-dim); font-size: 0.8rem; margin-left: 8px; }
+    .step-body select.m-val { padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px;
+        background: #201a30; color: var(--text); font-size: 0.85rem; width: 70px; }
+    .step-body .add-purple { cursor: pointer; color: var(--purple-bright); font-size: 0.85rem; border: 1px dashed var(--border);
+        padding: 4px 10px; border-radius: 5px; }
+    .step-body .del-purple { cursor: pointer; color: var(--red); padding: 0 2px; }
+
+    .btn { display: inline-block; padding: 10px 22px; border: none; border-radius: 6px;
+        background: var(--purple); color: #fff; font-size: 0.95rem; cursor: pointer; transition: opacity 0.2s; margin-right: 8px; }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+    .hint { font-size: 0.78rem; color: var(--text-dim); margin-top: 8px; }
+
+    .funnel { list-style: none; margin: 0 0 16px; padding: 0; }
+    .funnel li { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px;
+        background: rgba(75,46,98,0.2); font-size: 0.85rem; display: flex; justify-content: space-between; }
+    .funnel li .step-desc { color: var(--text-dim); }
+    .funnel li .step-count { color: var(--purple-bright); font-weight: 600; }
+    .result-list { list-style: none; margin: 0; padding: 0; }
+    .result-item { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px;
+        background: rgba(75,46,98,0.2); font-size: 0.85rem; word-break: break-all; }
+    .result-item .n-badge { display: inline-block; background: var(--purple); color: #fff; border-radius: 4px;
+        padding: 0 8px; font-weight: 600; margin-right: 8px; }
+    .summary { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 12px; }
+    .summary strong { color: var(--purple-bright); }
+    .empty { color: var(--text-dim); text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>置换序列筛选</h1>
+    <p class="subtitle">漏斗式分步筛选：排除 → 全部包含 → n选m连续，逐步收窄</p>
+
+    <div class="card">
+        <h2>1. 加载 txt 文件</h2>
+        <div class="dropzone" id="dropzone">拖拽 txt 文件到这里，或点击选择文件</div>
+        <input type="file" id="fileInput" accept=".txt" style="display:none">
+    </div>
+
+    <div class="card">
+        <h2>2. 筛选步骤（按顺序执行，像漏斗逐层收窄）</h2>
+        <div id="stepList"></div>
+        <button class="btn ghost" id="addStepBtn" type="button">+ 添加步骤</button>
+        <div class="hint">
+            步骤类型：<b>排除</b>=出现即淘汰 · <b>全部包含</b>=指定的每个紫脉都必须出现（顺序无所谓） · <b>n选m连续</b>=存在连续M个（都在指定紫脉里、互不相同）。
+            每步可增删紫脉、调整顺序。序列文件由洗髓页「置换脉序查找」里的「下载全部序列（0..N）」导出。
+        </div>
+    </div>
+
+    <div class="card">
+        <button class="btn" id="scanBtn" disabled>扫描</button>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none">
+        <h2>筛选漏斗</h2>
+        <ul class="funnel" id="funnel"></ul>
+        <h2>最终结果</h2>
+        <div class="summary" id="summary"></div>
+        <ul class="result-list" id="resultList"></ul>
+    </div>
+</div>
+
+<script src="./shared/exchange_sequence_filter.js?v=20260926filter3"></script>
+<script>
+(function () {
+    // 解析与判定复用共享模块：洗髓页的「在线筛选」也用同一套，避免两处各写一份
+    var FILTER = window.ExchangeSequenceFilter;
+    var PURPLE_NAMES = FILTER ? FILTER.purpleNames() : [];
+
+    var dropzone = document.getElementById('dropzone');
+    var fileInput = document.getElementById('fileInput');
+    var scanBtn = document.getElementById('scanBtn');
+    var resultCard = document.getElementById('resultCard');
+    var resultList = document.getElementById('resultList');
+    var summary = document.getElementById('summary');
+    var funnel = document.getElementById('funnel');
+    var stepList = document.getElementById('stepList');
+    var addStepBtn = document.getElementById('addStepBtn');
+
+    var fileContent = '';
+
+    function createPurpleSelect() {
+        var sel = document.createElement('select');
+        sel.className = 'purple';
+        var emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = '选择紫脉';
+        sel.appendChild(emptyOpt);
+        PURPLE_NAMES.forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            sel.appendChild(opt);
+        });
+        sel.addEventListener('change', updateScanButton);
+        return sel;
+    }
+
+    // 创建一个筛选步骤
+    function createStep() {
+        var step = document.createElement('div');
+        step.className = 'step';
+
+        var head = document.createElement('div');
+        head.className = 'step-head';
+        var order = document.createElement('span');
+        order.className = 'step-order';
+        var upBtn = document.createElement('button');
+        upBtn.textContent = '↑';
+        var downBtn = document.createElement('button');
+        downBtn.textContent = '↓';
+        order.appendChild(upBtn);
+        order.appendChild(downBtn);
+        var title = document.createElement('span');
+        title.className = 'step-title';
+        var typeSel = document.createElement('select');
+        typeSel.className = 'step-type';
+        [['exclude', '排除'], ['one', '全部包含'], ['nm', 'n选m连续']].forEach(function (it) {
+            var opt = document.createElement('option');
+            opt.value = it[0];
+            opt.textContent = it[1];
+            typeSel.appendChild(opt);
+        });
+        var del = document.createElement('span');
+        del.className = 'step-del';
+        del.textContent = '×';
+
+        head.appendChild(order);
+        head.appendChild(title);
+        head.appendChild(typeSel);
+        head.appendChild(del);
+
+        var body = document.createElement('div');
+        body.className = 'step-body';
+        var mLabel = document.createElement('span');
+        mLabel.className = 'm-label';
+        mLabel.textContent = '连续M：';
+        mLabel.style.display = 'none';
+        var mVal = document.createElement('select');
+        mVal.className = 'm-val';
+        [2, 3, 4, 5, 6].forEach(function (v) {
+            var opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v;
+            mVal.appendChild(opt);
+        });
+        mVal.value = '2';
+        mVal.style.display = 'none';
+
+        body.appendChild(mLabel);
+        body.appendChild(mVal);
+
+        var addPurple = document.createElement('span');
+        addPurple.className = 'add-purple';
+        addPurple.textContent = '+ 紫脉';
+
+        function addPurpleSel() {
+            var sel = createPurpleSelect();
+            var rem = document.createElement('span');
+            rem.className = 'del-purple';
+            rem.textContent = '×';
+            rem.addEventListener('click', function () { sel.remove(); rem.remove(); updateScanButton(); });
+            body.appendChild(sel);
+            body.appendChild(rem);
+            updateScanButton();
+        }
+        addPurple.addEventListener('click', addPurpleSel);
+
+        body.appendChild(addPurple);
+
+        function syncType() {
+            var t = typeSel.value;
+            title.textContent = t === 'exclude' ? '排除' : (t === 'one' ? '全部包含' : 'n选m连续');
+            var showM = t === 'nm';
+            mLabel.style.display = showM ? '' : 'none';
+            mVal.style.display = showM ? '' : 'none';
+            updateScanButton();
+        }
+        typeSel.addEventListener('change', syncType);
+
+        upBtn.addEventListener('click', function () {
+            var prev = step.previousElementSibling;
+            if (prev && prev.classList.contains('step')) stepList.insertBefore(step, prev);
+        });
+        downBtn.addEventListener('click', function () {
+            var next = step.nextElementSibling;
+            if (next && next.classList.contains('step')) stepList.insertBefore(next, step);
+        });
+        del.addEventListener('click', function () { step.remove(); updateScanButton(); });
+
+        step.appendChild(head);
+        step.appendChild(body);
+        syncType();
+
+        addPurpleSel();
+        addPurpleSel();
+        return step;
+    }
+
+    addStepBtn.addEventListener('click', function () { stepList.appendChild(createStep()); });
+
+    // 读取一个步骤的配置
+    function readStep(step) {
+        var type = step.querySelector('.step-type').value;
+        var purples = [];
+        step.querySelectorAll('select.purple').forEach(function (sel) {
+            if (sel.value && purples.indexOf(sel.value) === -1) purples.push(sel.value);
+        });
+        var m = type === 'nm' ? (parseInt(step.querySelector('.m-val').value, 10) || 2) : null;
+        return { type: type, purples: purples, m: m };
+    }
+
+    function updateScanButton() {
+        scanBtn.disabled = !fileContent;
+    }
+
+    // 文本到手就统一走这里
+    function applyText(text, label) {
+        fileContent = String(text || '');
+        dropzone.textContent = label ? ('已加载：' + label) : '已加载序列';
+        dropzone.classList.add('loaded');
+        updateScanButton();
+        if (!scanBtn.disabled) scanBtn.click();   // 载入即扫，不用手点
+    }
+
+    dropzone.addEventListener('click', function () { fileInput.click(); });
+    fileInput.addEventListener('change', function (e) { if (e.target.files[0]) readFile(e.target.files[0]); });
+    dropzone.addEventListener('dragover', function (e) { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', function () { dropzone.classList.remove('dragover'); });
+    dropzone.addEventListener('drop', function (e) { e.preventDefault(); dropzone.classList.remove('dragover'); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); });
+
+    function readFile(file) {
+        var reader = new FileReader();
+        reader.onload = function () { applyText(reader.result, file.name); };
+        reader.readAsText(file, 'utf-8');
+    }
+
+    scanBtn.addEventListener('click', function () {
+        if (!fileContent || !FILTER) return;
+        var steps = [];
+        stepList.querySelectorAll('.step').forEach(function (st) { steps.push(readStep(st)); });
+        // 无筛选步骤也继续往下走：直接展示全部去重序列
+
+        var parsed = FILTER.parseText(fileContent);
+        var result = FILTER.runFunnel(parsed.records, steps, parsed.dupCount);
+
+        resultCard.style.display = 'block';
+        funnel.innerHTML = result.funnel.map(function (row) {
+            return '<li><span class="step-desc">' + row.desc + '</span><span class="step-count">' + row.count + '</span></li>';
+        }).join('');
+        if (!result.hits.length) {
+            summary.innerHTML = '最终无匹配结果';
+            resultList.innerHTML = '<li class="empty">无匹配结果</li>';
+            return;
+        }
+        summary.innerHTML = '最终 <strong>' + result.hits.length + '</strong> 条序列命中';
+        resultList.innerHTML = result.hits.map(function (m) {
+            return '<li class="result-item"><span class="n-badge">n=' + m.n + '</span>' + m.names.join(' · ') + '</li>';
+        }).join('');
+    });
+})();
+</script>
+</body>
+</html>
