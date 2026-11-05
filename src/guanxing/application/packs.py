@@ -51,6 +51,8 @@ class StorageStack:
         default_factory=lambda: _unbound('write_local_save'))
     open_url: Callable[[str], bool] = field(
         default_factory=lambda: _unbound('open_url'))
+    is_elevated: Callable[[], bool] = field(
+        default_factory=lambda: _unbound('is_elevated'))
 
 
 def _unbound(name: str, owner: str = 'StorageStack') -> Any:

@@ -29,7 +29,7 @@ from guanxing.infra.optional import available
 from guanxing.infra.reporting.log_sink import LogReporter
 from guanxing.infra.savedb.sqlite_repo import DBProcessorImpl
 from guanxing.infra.shared.settings import load_settings
-from guanxing.infra.web.browser import open_url
+from guanxing.infra.web.browser import is_elevated, open_url
 from guanxing.infra.web.publish import write_local_save
 from guanxing.shared.progress import ProgressSink
 from guanxing.shared.settings import Settings
@@ -139,6 +139,7 @@ def build_stacks(
         clock=datetime.now,
         write_local_save=write_local_save,
         open_url=open_url,
+        is_elevated=is_elevated,
     )
     device = DeviceStack(open_device=_open_device,
                          use_serial=lambda serial: chosen.__setitem__('serial', serial))

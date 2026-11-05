@@ -12,12 +12,13 @@ from guanxing.application import packs
 from guanxing.application.ports.device import DeviceInfo, RemoteFile
 from guanxing.application.usecases import device_saves as ds
 from guanxing.domain.save import naming
-from guanxing.shared.errors import AppError
+from guanxing.shared.errors import ADBError, AppError
 from tests.support import RecordingProgress
 
 
 class FakeDevice:
-    def __init__(self, devices=(), saves=(), fail_pull=False, by_package=None) -> None:
+    def __init__(self, devices=(), saves=(), fail_pull=False, by_package=None,
+                 root_error=None) -> None:
         self._devices = list(devices)
         self._saves = list(saves)
         self.fail_pull = fail_pull
@@ -25,6 +26,13 @@ class FakeDevice:
         self.detected: list[str] = list(self.by_package)
         self.asked: list[str] = []
         self.pulled: list[tuple[str, Path]] = []
+        self.root_error = root_error
+        self.root_asked = 0
+
+    def ensure_root(self) -> None:
+        self.root_asked += 1
+        if self.root_error is not None:
+            raise self.root_error
 
     def devices(self):
         return self._devices
@@ -76,6 +84,29 @@ def test_list_saves_reports_package_in_message(tmp_path: Path) -> None:
         ds.list_saves(device, serial='emulator-5554', package='com.x',
                       progress=RecordingProgress())
     assert 'com.x' in err.value.message
+
+
+def test_list_saves_asks_for_root_first() -> None:
+    """存档都在 /data/data 下，非 root 读不到，所以取档前必须先确认身份。"""
+    gateway = FakeDevice(by_package={'com.x': [SAVE]})
+
+    ds.list_saves(_device(gateway), serial='emulator-5554', package='com.x',
+                  progress=RecordingProgress())
+
+    assert gateway.root_asked == 1
+
+
+def test_list_saves_reports_root_failure_with_actionable_hint() -> None:
+    """提权失败要直接报出来，别让每条路径都静默返回空。"""
+    gateway = FakeDevice(by_package={'com.x': [SAVE]},
+                         root_error=ADBError('模拟器没有以 root 运行',
+                                             hint='在 MuMu 设置里打开 root 权限'))
+
+    with pytest.raises(ADBError) as err:
+        ds.list_saves(_device(gateway), serial='emulator-5554', package='com.x',
+                      progress=RecordingProgress())
+
+    assert any('root' in h.lower() for h in err.value.hints)
 
 
 def test_pull_save_writes_into_cache_dir(tmp_path: Path) -> None:

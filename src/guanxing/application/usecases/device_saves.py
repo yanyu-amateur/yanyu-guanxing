@@ -55,14 +55,15 @@ def list_saves(
         按修改时间倒序的远端文件。
     Raises:
         AppError: 设备上一个带存档的包都没有。
+        ADBError: 设备读不了（没 root / 断开 / 多设备歧义）。
     """
     gateway = device.open_device(serial=serial)
+    gateway.ensure_root()
 
     wanted = package or DEFAULT_PACKAGE
     progress.step('目标包名', f'{wanted}（{label_of(wanted)}）')
     files = list(gateway.find_saves(wanted))
     if not files and package is None:
-        # 内置表没命中（新渠道）——问设备：谁有 files/<账号>/serverNN/dat.db
         detected = list(gateway.detect_save_packages())
         progress.step('自动探测包名', '、'.join(detected) or '（无）')
         for candidate in detected:
@@ -74,6 +75,7 @@ def list_saves(
             f'在 {wanted}（{label_of(wanted)}）下没找到 dat.db',
             hints=[
                 '确认游戏已进入过一次角色（存档是进游戏后才落盘的）',
+                '确认模拟器已以 root 运行（adb shell id 应显示 uid=0）',
                 '玩的是其他渠道就用 --package 指定包名，或设环境变量 YYGX_PKG',
                 '或者在向导里改用 capture 模式，配合抓包拿到 psw',
             ],

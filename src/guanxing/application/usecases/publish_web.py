@@ -33,15 +33,20 @@ def publish_web(
         progress.warn('没有可注入网页的存档数据')
         return None
 
-    target = storage.write_local_save(settings.web_dir, data, meta)
+    target = storage.write_local_save(Path(settings.web_dir).resolve(), data, meta)
     progress.step('已写入', f'{target}（双击 index.html 即可使用）')
 
-    index = Path(settings.web_dir) / INDEX_NAME
+    index = Path(settings.web_dir).resolve() / INDEX_NAME
     if not storage.fs.exists(index):
         progress.warn(f'没找到 {index}，请手动打开')
         return target
-    storage.open_url(index.as_uri())
+    if storage.is_elevated():
+        progress.warn('当前是管理员权限运行，浏览器可能收不到打开的请求；'
+                      '建议用普通权限运行本工具')
+    if not storage.open_url(index.as_uri()):
+        progress.warn(f'没能自动打开浏览器（可能主进程是管理员权限，'
+                      f'或浏览器正忙），请手动打开：{index}')
     return target
 
-
 __all__ = ['INDEX_NAME', 'publish_web']
+

@@ -27,8 +27,14 @@ class _FakeADB(DeviceGatewayImpl):
         self.stat_text = stat_text
         self.ls_text = ls_text
         self.commands: list[str] = []
+        self.timeout = 20
+        self.serial = None
+        self._serial_ok = None
+        self._root_ready = False
+        self._last_devices = None
 
-    def sh(self, cmd: str, *, timeout: int | None = None) -> str:
+    def sh(self, cmd: str, *, timeout: int | None = None,
+           check: bool = True) -> str:
         self.commands.append(cmd)
         return self.stat_text if cmd.lstrip().startswith('stat') else self.ls_text
 
@@ -91,6 +97,85 @@ def test_glob_is_not_quoted_as_a_whole() -> None:
         assert "'*/server*/dat.db'" not in cmd
 
 
+def test_stat_partial_failure_keeps_the_good_rows() -> None:
+    """glob 命中多路径时只要一条失败 stat 就退非 0，但 stdout 里的行必须留着。"""
+    mixed = (STAT_TEXT
+             + "stat: '/data/data/pkg/files/accC/server3/dat.db': No such file\n")
+    files = _FakeADB(stat_text=mixed).find_saves('pkg')
+    assert len(files) == 2, '两条合法结果不能因为第三条失败被整批丢掉'
+
+
+def test_permission_denied_is_reported_not_swallowed() -> None:
+    """非 root 时 stat/ls 全是 Permission denied，必须报出来而不是"没找到存档"。"""
+    with pytest.raises(ADBError) as err:
+        _FakeADB(stat_text="stat: '*': Permission denied",
+                 ls_text="ls: '*': Permission denied").find_saves('pkg')
+    assert 'root' in ' '.join(err.value.hints).lower()
+
+
+# ───────────── root 身份：读 /data/data 的前提 ─────────────
+class _RootADB(DeviceGatewayImpl):
+    """桩掉子进程，按脚本回 ``shell id`` 与 ``root``。"""
+
+    def __init__(self, *, id_outputs: list[str], root_output: str = 'restarting adbd as root') -> None:
+        self.exe = 'adb'
+        self.exe_src = 'test'
+        self.serial = 'emulator-5554'
+        self.timeout = 20
+        self._serial_ok = True
+        self._root_ready = False
+        self._last_devices = None
+        self.id_outputs = list(id_outputs)
+        self.root_output = root_output
+        self.calls: list[list[str]] = []
+
+    def _run(self, args, timeout=None):
+        self.calls.append(list(args))
+        if args[-2:] == ['shell', 'id']:
+            out = self.id_outputs.pop(0) if len(self.id_outputs) > 1 else self.id_outputs[0]
+            return type('P', (), {'returncode': 0, 'stdout': out.encode(), 'stderr': b''})()
+        if args[-1] == 'root':
+            return type('P', (), {'returncode': 0,
+                                  'stdout': self.root_output.encode(), 'stderr': b''})()
+        return type('P', (), {'returncode': 0, 'stdout': b'', 'stderr': b''})()
+
+
+def test_ensure_root_noop_when_already_root() -> None:
+    adb = _RootADB(id_outputs=['uid=0(root) gid=0(root)\n'])
+
+    adb.ensure_root()
+
+    assert adb.calls == [['adb', '-s', 'emulator-5554', 'shell', 'id']]
+
+
+def test_ensure_root_escalates_when_shell_is_not_root() -> None:
+    """MuMu 冷启动后 adbd 常以 shell 身份跑，这时必须主动 adb root。"""
+    adb = _RootADB(id_outputs=['uid=2000(shell) gid=2000(shell)\n',
+                               'uid=0(root) gid=0(root)\n'])
+
+    adb.ensure_root()
+
+    assert ['adb', '-s', 'emulator-5554', 'root'] in adb.calls
+    assert adb.calls[-1] == ['adb', '-s', 'emulator-5554', 'shell', 'id']
+
+
+def test_ensure_root_fails_with_actionable_message() -> None:
+    adb = _RootADB(id_outputs=['uid=2000(shell)\n'],
+                   root_output='adbd cannot run as root in production builds')
+
+    with pytest.raises(ADBError) as err:
+        adb.ensure_root()
+
+    assert any('root' in h.lower() for h in err.value.hints)
+
+
+def test_ensure_root_only_probes_once() -> None:
+    adb = _RootADB(id_outputs=['uid=0(root)\n'])
+    adb.ensure_root()
+    adb.ensure_root()
+    assert len([c for c in adb.calls if c[-1] == 'id']) == 1
+
+
 # ───────────── 指定了设备号：先核一遍，失效就不带 -s ─────────────
 class _SerialADB(DeviceGatewayImpl):
     """只桩掉子进程：``devices`` 返回固定列表，其余命令记录下来。
@@ -106,6 +191,8 @@ class _SerialADB(DeviceGatewayImpl):
         self.exe = 'adb'
         self.exe_src = 'test'
         self._serial_ok = None
+        self._root_ready = False
+        self._last_devices = None
         self.calls: list[list[str]] = []
 
     def _run(self, args, timeout=None):  # type: ignore[override]

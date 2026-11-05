@@ -44,7 +44,8 @@ class Recorder:
 
 
 def _storage(web_dir: Path, *, fail: bool = False,
-             files: set[str] | None = None) -> tuple[packs.StorageStack, list[str]]:
+             files: set[str] | None = None,
+             elevated: bool = False) -> tuple[packs.StorageStack, list[str]]:
     """造一个只实现"写文件 / 开浏览器 / 判断存在"的存储包。"""
     opened: list[str] = []
     existing = files if files is not None else {'index.html'}
@@ -82,6 +83,7 @@ def _storage(web_dir: Path, *, fail: bool = False,
         open_capture=lambda _p: object(),
         write_local_save=write_local_save,
         open_url=open_url,
+        is_elevated=lambda: elevated,
     ), opened
 
 
@@ -141,3 +143,54 @@ def test_unwired_storage_fails_loudly(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError):
         publish_web(settings, {'a': 1}, None, bare, RecordingProgress())
+
+
+def test_relative_web_dir_is_resolved_before_as_uri(tmp_path: Path) -> None:
+    """``web_dir`` 是相对路径时 ``as_uri()`` 会抛 ValueError，必须先 resolve。"""
+    settings = build_settings(workspace=Path('.'), web_dir=Path('web'))
+    assert not Path(settings.web_dir).is_absolute()
+
+    storage, opened = _storage(Path('web'))
+    sink = Recorder()
+
+    publish_web(settings, {'a': 1}, None, storage, sink)
+
+    assert len(opened) == 1
+    assert opened[0].startswith('file:///')
+    assert Path(opened[0].replace('file:///', '').replace('/', '\\')).is_absolute()
+
+
+def test_browser_open_failure_warns_with_path(tmp_path: Path) -> None:
+    """浏览器没打开时必须提示，并给出能直接双击的路径。"""
+    settings = build_settings(workspace=tmp_path)
+    storage, opened = _storage(settings.web_dir)
+
+    def failing_open(url: str) -> bool:
+        opened.append(url)
+        return False
+
+    storage = packs.StorageStack(
+        fs=storage.fs, layout=storage.layout,
+        open_savedb=storage.open_savedb, open_capture=storage.open_capture,
+        write_local_save=storage.write_local_save,
+        open_url=failing_open,
+        is_elevated=lambda: False,
+    )
+    sink = Recorder()
+
+    publish_web(settings, {'a': 1}, None, storage, sink)
+
+    assert len(opened) == 1
+    assert any('没能自动打开浏览器' in w for w in sink.warnings)
+    assert any('index.html' in w for w in sink.warnings)
+
+
+def test_elevated_run_warns_before_opening(tmp_path: Path) -> None:
+    """管理员权限下 DDE 常被拒绝，提前提示一句比失败后才发现好。"""
+    settings = build_settings(workspace=tmp_path)
+    storage, _opened = _storage(settings.web_dir, elevated=True)
+    sink = Recorder()
+
+    publish_web(settings, {'a': 1}, None, storage, sink)
+
+    assert any('管理员权限' in w for w in sink.warnings)

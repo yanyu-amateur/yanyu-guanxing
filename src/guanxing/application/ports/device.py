@@ -44,6 +44,10 @@ class DeviceGateway(Protocol):
 
     def devices(self) -> Sequence[DeviceInfo]: ...
 
+    def ensure_root(self) -> None:
+        """确认 adb shell 是 root，不是就尝试提权（失败抛 ADBError）。"""
+        ...
+
     def sh(self, cmd: str, *, timeout: int | None = None) -> str:
         """执行 shell 命令，返回 stdout（失败抛 ADBError）。"""
         ...
