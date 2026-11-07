@@ -45,6 +45,17 @@ class KeyStore(Protocol):
     def remember_outer(self, account: str | None, key: str,
                        save_id: str | None = None) -> bool: ...
 
+    def remember_env(self, *, adb: str | None = None, serial: str | None = None,
+                     pkg: str | None = None) -> None:
+        """把这次用顺手的 adb / serial / pkg 记进 keys.local.json。
+
+        Args:
+            adb: adb.exe 的绝对路径。
+            serial: 实际使用的设备号。
+            pkg: 实际使用的包名（自动探测到的那个）。
+        """
+        ...
+
     def report_runtime_conflicts(self) -> list[str]:
         """运行期挖到、却被内置表拒绝的钥匙，给用户的提示（无冲突时为空）。
 

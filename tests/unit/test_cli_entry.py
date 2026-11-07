@@ -15,11 +15,12 @@ from guanxing.application.usecases.device_saves import CACHE_KEEP_SEC, Picked
 from guanxing.bootstrap import build_settings
 from guanxing.infra.reporting.log_sink import INDENT
 from guanxing.interface.cli import app, flow
-from guanxing.interface.cli.app import _pre_extract, main
+from guanxing.interface.cli.app import build_parser, main
 from guanxing.interface.cli.exit_codes import EXIT_OK, EXIT_USER
 from guanxing.interface.cli.flow import FlowRequest
 from guanxing.shared.console import take_input_mark
 from guanxing.shared.errors import CancelledError, HarError
+from guanxing.shared.settings import MemMode
 from tests.support import RecordingProgress, stacks_for
 
 
@@ -35,34 +36,6 @@ def _restore_root_logging():
     yield
     root.handlers[:] = saved
     root.setLevel(level)
-
-
-def test_pre_extract_pulls_v_after_subcommand() -> None:
-    rest, verbose, quiet, log = _pre_extract(['local', 'a.db', '-v'])
-    assert rest == ['local', 'a.db']
-    assert (verbose, quiet, log) == (1, False, None)
-
-
-def test_pre_extract_counts_double_v() -> None:
-    rest, verbose, _, _ = _pre_extract(['-vv', 'local', 'x'])
-    assert rest == ['local', 'x'] and verbose == 2
-
-
-@pytest.mark.parametrize('argv', [
-    ['local', 'x', '--log', 'a.log'],
-    ['--log', 'a.log', 'local', 'x'],
-    ['local', 'x', '--log=a.log'],
-])
-def test_pre_extract_log_anywhere(argv: list[str]) -> None:
-    rest, _, _, log = _pre_extract(argv)
-    assert log == 'a.log'
-    assert rest == ['local', 'x']
-
-
-def test_pre_extract_keeps_positional_untouched() -> None:
-    rest, verbose, quiet, log = _pre_extract(['capture', 'x.har', '--db', 'd.db'])
-    assert rest == ['capture', 'x.har', '--db', 'd.db']
-    assert (verbose, quiet, log) == (0, False, None)
 
 
 def test_local_missing_db_is_user_error(tmp_path: Path, monkeypatch) -> None:
@@ -101,6 +74,64 @@ def test_cancel_is_logged_as_info_not_error(monkeypatch, caplog) -> None:
 
 
 # ───────────────────── 全局开关要落进 Settings ─────────────────────
+@pytest.mark.parametrize('argv', [
+    ['--serial', 'A', 'local', 'x.db'],
+    ['local', 'x.db', '--serial', 'A'],
+    ['local', '--serial', 'A', 'x.db'],
+])
+def test_run_options_work_on_either_side_of_the_subcommand(argv: list[str]) -> None:
+    assert build_parser().parse_args(argv).serial == 'A'
+
+
+def test_run_options_are_available_without_a_subcommand() -> None:
+    """向导入口也要能指定 adb / 设备 / 包名。"""
+    args = build_parser().parse_args(
+        ['--adb', 'adb.exe', '--serial', 'S', '--package', 'p',
+         '-o', 'out', '--runtime', 'ios', '--mem', 'off'])
+
+    assert args.command is None
+    assert (args.adb, args.serial, args.package, args.out,
+            args.runtime, args.mem) == ('adb.exe', 'S', 'p', 'out', 'ios', 'off')
+
+
+def test_later_value_wins_when_given_twice() -> None:
+    assert build_parser().parse_args(
+        ['--serial', 'A', 'local', 'x', '--serial', 'B']).serial == 'B'
+
+
+def test_logging_flags_work_anywhere_and_accumulate() -> None:
+    assert app.parse_argv(['local', 'x', '-vv']).verbose == 2
+    assert app.parse_argv(['-v', 'local', 'x', '-v']).verbose == 2
+    assert app.parse_argv(['local', 'x', '--log=a.log']).log == 'a.log'
+    assert app.parse_argv(['--log', 'a.log', 'local', 'x']).log == 'a.log'
+
+
+def test_settings_take_device_options_from_the_main_command(tmp_path: Path,
+                                                            monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    args = build_parser().parse_args(
+        ['--adb', 'adb.exe', '--serial', '127.0.0.1:5561',
+         '--package', 'com.x', '-o', str(tmp_path / 'out')])
+
+    settings = app._settings_for(args)
+
+    assert settings.adb_path == 'adb.exe'
+    assert settings.serial == '127.0.0.1:5561'
+    assert settings.package == 'com.x'
+    assert settings.out_dir == tmp_path / 'out'
+
+
+def test_mem_and_runtime_only_override_when_given(tmp_path: Path,
+                                                  monkeypatch) -> None:
+    """不给 --mem 时环境变量要生效，不能被 CLI 的默认值悄悄盖掉。"""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('YYGX_MEM', 'off')
+
+    assert app._settings_for(build_parser().parse_args(['local'])).mem_mode is MemMode.OFF
+    assert app._settings_for(
+        build_parser().parse_args(['local', '--mem', 'auto'])).mem_mode is MemMode.AUTO
+
+
 def test_verbose_and_quiet_reach_settings(tmp_path: Path, monkeypatch) -> None:
     """-vv 要能显示完整密钥、--quiet 要能关掉进度条，都靠 Settings 里这两个字段。"""
     monkeypatch.chdir(tmp_path)      # 同上：别读开发者真实的 keys.local.json

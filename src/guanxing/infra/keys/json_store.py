@@ -136,7 +136,6 @@ class KeyStoreImpl(KeyStore):
             )
             return
         try:
-            # 内置表已经认识的后缀不必按 1.1 的 runtime 再登记一份
             migration = migrate(raw, known_suffixes=self.key_table.channel_suffixes)
         except KeysFileTooNew as exc:
             self.persist = False
@@ -276,7 +275,6 @@ class KeyStoreImpl(KeyStore):
             "outer_keys_by_acc": self.key_table.outer_keys_by_acc,
             "outer_keys_by_id": self.key_table.outer_keys_by_id,
         }
-        # 环境值不由本类产生，只负责原样带下去（1.1 写进去的路径不能因为一次落盘就丢）
         keys_local_data.update(self.local_env)
         write_json(self.keys_local_path, keys_local_data)
 
@@ -378,6 +376,20 @@ class KeyStoreImpl(KeyStore):
             'keys.local.json 写入失败，外层密钥仅保留在内存',
             enabled=self.persist_local,
         )
+
+    def remember_env(self, *, adb: str | None = None, serial: str | None = None,
+                     pkg: str | None = None) -> None:
+        """把这次用顺手的 adb / serial / pkg 写回 keys.local.json。"""
+        changed = False
+        for name, value in (('adb', adb), ('serial', serial), ('pkg', pkg)):
+            text = (value or '').strip()
+            if text and self.local_env.get(name) != text:
+                self.local_env[name] = text
+                changed = True
+        if changed:
+            self._flush(self._save_keys_local,
+                        'keys.local.json 写入失败，adb 环境仅保留在内存',
+                        enabled=self.persist_local)
 
     @staticmethod
     def _flush(writer: Callable[[], None], message: str, *,

@@ -5,6 +5,7 @@ import 期不要读环境变量或构造对象，否则测试之间会互相污�
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -92,12 +93,25 @@ def build_stacks(
     # 用例层选中的设备号写在这里，之后开网关（含内存扫描）都优先用它
     chosen: dict[str, str] = {}
 
+    def _remember_env(**env: str | None) -> None:
+        if env.get('serial') and not env.get('adb'):
+            env['adb'] = chosen.get('adb')
+        try:
+            keystore.remember_env(**env)
+        except Exception:  # noqa: BLE001 - 落档失败不该中断导入
+            logging.getLogger(PROG).warning('记录设备环境失败', exc_info=True)
+
     def _open_device(**overrides) -> DeviceGatewayImpl:
-        return DeviceGatewayImpl(
+        gateway = DeviceGatewayImpl(
             exe=overrides.pop('exe', settings.adb_path),
             serial=overrides.pop('serial', chosen.get('serial') or settings.serial),
             timeout=overrides.pop('timeout', settings.timeouts.adb),
         )
+        chosen.setdefault('adb', gateway.exe)
+        return gateway
+
+    def _use_serial(serial: str) -> None:
+        chosen['serial'] = serial
 
     # 内存爆破：游戏更新 → psw 变了 → keys.json 里没有 → 只能去进程内存里挖。
     # 构造本身不碰 adb（真要用时才开设备），所以“离线解档”场景不受影响。
@@ -142,7 +156,8 @@ def build_stacks(
         is_elevated=is_elevated,
     )
     device = DeviceStack(open_device=_open_device,
-                         use_serial=lambda serial: chosen.__setitem__('serial', serial))
+                         use_serial=_use_serial,
+                         remember=_remember_env)
     return crypto, storage, device
 
 

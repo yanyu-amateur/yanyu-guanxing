@@ -1,6 +1,6 @@
 """keys.json 与 keys.local.json 的版本号与迁移，锁住三类断言。
 
-1.1 的 inner_keys 能拆成 psw 与后缀两张表、outer_keys 能并成 outer_keys_by_acc 列表；
+旧版 inner_keys 能拆成 psw 与后缀两张表、outer_keys 能并成 outer_keys_by_acc 列表；
 升级前一定先备份，备份失败就不写；文件损坏或版本过新时一个字都不许写。
 """
 from __future__ import annotations
@@ -22,12 +22,12 @@ from guanxing.infra.keys.migrate import (
 )
 from guanxing.shared.errors import KeysFileTooNew
 
-# 1.1 工具的格式（tool_1.1/keys.json 的形状，只留几条代表性的）
+# 旧版工具的 keys.json 形状，只留几条代表性的
 LEGACY = {
     '_说明': ['内层密钥表'],
     'inner_keys': [
         {'runtime': 'android', 'version': '00070002', 'key': 'ab12cd34SUFIX001'},
-        # 1.1 里 psw 与后缀并非严格按 runtime 归属：这条标 ios 却带安卓后缀
+        # 旧版里 psw 与后缀并非严格按 runtime 归属：这条标 ios 却带安卓后缀
         {'runtime': 'ios', 'version': '00070004', 'key': 'cd34ef56SUFIX001'},
         # 这条的后缀是 test_server 的
         {'runtime': 'android', 'version': '00070003', 'key': 'ef56gh78cgkmi4cq'},
@@ -89,7 +89,7 @@ def test_migrate_splits_legacy_inner_keys() -> None:
 
 
 def test_migrate_does_not_duplicate_known_suffixes() -> None:
-    """内置表已认识的后缀，不再按 1.1 条目的 runtime 在另一张渠道下重复登记。"""
+    """内置表已认识的后缀，不再按旧版条目的 runtime 在另一张渠道下重复登记。"""
     result = migrate(LEGACY, known_suffixes={
         'android': ['SUFIX001'], 'test_server': ['cgkmi4cq'],
     })
@@ -100,7 +100,7 @@ def test_migrate_does_not_duplicate_known_suffixes() -> None:
 
 
 def test_migrate_keeps_existing_psw_on_conflict() -> None:
-    """文件里已有的 psw 是用户自己跑出来的，比 1.1 的旧表更可信。"""
+    """文件里已有的 psw 是用户自己跑出来的，比旧版的表更可信。"""
     doc = dict(LEGACY)
     doc['version_psw_table'] = {'00070002': 'newpsw00'}
     result = migrate(doc)
@@ -148,7 +148,7 @@ def test_migrate_ignores_dirty_values() -> None:
 
 
 # ───────────────────── keys.local.json 的迁移 ─────────────────────
-# 1.1 工具的形状（tool_1.1/keys.local.json，账号与密钥是合成值）
+# 旧版 keys.local.json 的形状（账号与密钥是合成值）
 LEGACY_LOCAL = {
     '_说明': ['外层密钥表'],
     'adb': r'C:\tools\platform-tools\adb.exe',
@@ -166,7 +166,7 @@ LEGACY_LOCAL = {
 
 
 def test_migrate_local_renames_outer_keys() -> None:
-    """1.1 叫 outer_keys、值是单个字符串；新版叫 outer_keys_by_acc、值是列表。"""
+    """旧版叫 outer_keys、值是单个字符串；新版叫 outer_keys_by_acc、值是列表。"""
     result = migrate_local(LEGACY_LOCAL)
     assert result.from_version == 0
     assert result.changed
@@ -263,7 +263,7 @@ def test_legacy_local_file_is_backed_up_first(tmp_path: Path) -> None:
 
 
 def test_local_env_survives_a_rewrite(tmp_path: Path) -> None:
-    """迁移之后一旦要落盘（记了新密钥），1.1 写进去的 adb 路径不能跟着丢。"""
+    """迁移之后一旦要落盘（记了新密钥），旧版写进去的 adb 路径不能跟着丢。"""
     store, _table, local = _open_local(tmp_path, LEGACY_LOCAL)
     assert store.remember_outer('NEWACC', 'mmmmnnnnoooopppp', 'NEWSID') is True
     on_disk = json.loads(local.read_text(encoding='utf-8'))
@@ -271,6 +271,27 @@ def test_local_env_survives_a_rewrite(tmp_path: Path) -> None:
     assert on_disk['serial'] == LEGACY_LOCAL['serial']
     assert on_disk['pkg'] == LEGACY_LOCAL['pkg']
     assert on_disk['outer_keys_by_id']['NEWSID'] == ['mmmmnnnnoooopppp']
+
+
+def test_remember_env_writes_adb_serial_pkg(tmp_path: Path) -> None:
+    """这次用顺手的设备环境要落盘，下次启动直接复用。"""
+    store, _table, local = _open_local(tmp_path, {'outer_keys': {}})
+
+    store.remember_env(adb=r'C:\tools\platform-tools\adb.exe',
+                       serial='127.0.0.1:5561', pkg='com.example.game')
+
+    on_disk = json.loads(local.read_text(encoding='utf-8'))
+    assert on_disk['adb'] == r'C:\tools\platform-tools\adb.exe'
+    assert on_disk['serial'] == '127.0.0.1:5561'
+    assert on_disk['pkg'] == 'com.example.game'
+
+
+def test_remember_env_keeps_outer_keys(tmp_path: Path) -> None:
+    store, _table, local = _open_local(tmp_path, LEGACY_LOCAL)
+    store.remember_env(serial='127.0.0.1:5561')
+    on_disk = json.loads(local.read_text(encoding='utf-8'))
+    assert on_disk['outer_keys_by_acc']['acc000001@example.com'] == ['aaaabbbbccccdddd']
+    assert on_disk['serial'] == '127.0.0.1:5561'
 
 
 def test_second_local_load_does_not_rewrite(tmp_path: Path) -> None:

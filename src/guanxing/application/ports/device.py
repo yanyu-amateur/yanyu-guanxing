@@ -42,7 +42,9 @@ class RemoteFile:
 class DeviceGateway(Protocol):
     """设备能力集合"""
 
-    def devices(self) -> Sequence[DeviceInfo]: ...
+    def devices(self) -> Sequence[DeviceInfo]:
+        """在线设备；一台都没有时抛 ADBError（实现会先主动 connect 本地模拟器端口）。"""
+        ...
 
     def ensure_root(self) -> None:
         """确认 adb shell 是 root，不是就尝试提权（失败抛 ADBError）。"""

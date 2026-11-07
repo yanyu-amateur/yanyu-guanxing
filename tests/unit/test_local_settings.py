@@ -1,7 +1,6 @@
 """配置优先级：命令行 > 环境变量 > keys.local.json 里的本机环境 > 内置默认。
 
-1.1 工具把上次用的 adb / serial / pkg 存在 keys.local.json 里；
-新版仍然认这三个值，所以老用户的文件不用手改就能继续跑。
+上次用过的 adb / serial / pkg 存在 keys.local.json 里，换机器也能继续跑。
 """
 from __future__ import annotations
 

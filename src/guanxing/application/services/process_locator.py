@@ -82,7 +82,9 @@ class ProcessLocator:
             return
         raise ADBError(
             '没有检测到模拟器',
-            hint='adb devices 里一台都没有：模拟器没启动，或 adb 连的不是它那个端口',
+            hints=['确认模拟器已启动，且设置里打开了“ADB 调试”',
+                   '端口不是默认的就用 --serial 指定（adb devices 可查看已连设备），'
+                   '例: python run.py local --serial 127.0.0.1:5561'],
         )
 
     def _detect_packages(self, device: DeviceGateway) -> list[str]:

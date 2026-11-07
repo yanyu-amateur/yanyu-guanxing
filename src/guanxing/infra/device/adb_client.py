@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import socket
 import subprocess
 import sys
 import time
@@ -23,19 +24,44 @@ logger = logging.getLogger(__name__)
 
 _CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
-# adb 服务端刚起来（第一次调用、或刚 kill-server）时设备还没注册完，要等几秒；
-# 实测 MuMu 三个实例约 6 秒，留一点余量
-DEVICE_SETTLE_SEC = 8.0
+DEVICE_SETTLE_SEC = 3.0
+CONNECT_SETTLE_SEC = 5.0
 DEVICE_POLL_SEC = 0.25
+CONNECT_TIMEOUT_SEC = 2
+PORT_PROBE_TIMEOUT_SEC = 0.05
+ADBD_RESTART_SEC = 10.0
 
-# adb root 之后 adbd 会重启，要给它一点时间重新上线
-ADBD_RESTART_SEC = 5.0
+CONNECT_PORTS = (
+    *range(5555, 5576, 2),
+    7555, 7556,
+    21503, 21513,
+    *range(16384, 16641, 32),
+    62001, 62025, 62026, 62027,
+    58526,
+)
 
 ROOT_HINT = (
     '模拟器没有以 root 运行，读不到 /data/data 下的存档。'
     '请在模拟器设置里打开 root（MuMu：设置 → 其他 → root 权限），'
     '或在终端执行 adb root 后重试'
 )
+
+
+def _is_tcp_serial(serial: str) -> bool:
+    """``host:port`` 形式的设备号（模拟器都是这种，可以主动 connect）。"""
+    host, sep, port = str(serial).rpartition(':')
+    return bool(host and sep and port.isdigit())
+
+
+def _port_open(serial: str) -> bool:
+    """本地端口是否有人在监听；没监听就不必再起一个 adb 去撞超时。"""
+    host, _, port = str(serial).rpartition(':')
+    try:
+        with socket.create_connection((host, int(port)),
+                                      timeout=PORT_PROBE_TIMEOUT_SEC):
+            return True
+    except (OSError, ValueError):
+        return False
 
 
 def _quote(path: str) -> str:
@@ -74,6 +100,7 @@ class DeviceGatewayImpl(DeviceGateway):
         self.timeout = timeout
         self._serial_ok: bool | None = None
         self._root_ready = False
+        self._probed = False
         self._last_devices: list[DeviceInfo] | None = None
 
     # ────────────────────── 基础执行 ──────────────────────
@@ -82,7 +109,7 @@ class DeviceGatewayImpl(DeviceGateway):
         return [self.exe, *(['-s', serial] if serial else [])]
 
     def _checked_serial(self) -> str | None:
-        """核一遍 serial 是否真的在线，不在就退回自动选择。
+        """核一遍 serial 是否真的在线；不在就先把它连回来，再退回自动选择。
 
         Returns:
             可以带 -s 的设备号；没指定或已确认失效时为 None。
@@ -96,12 +123,14 @@ class DeviceGatewayImpl(DeviceGateway):
             except (ADBError, ADBTimeout) as exc:
                 logger.warning(
                     '查不到 adb 设备列表（%s），本轮沿用 %s', exc, self.serial)
+                self._serial_ok = True
                 return self.serial
-            if online:
-                self._serial_ok = self.serial in online
-                if not self._serial_ok:
-                    logger.warning(
-                        '指定的模拟器 %s 不在 adb devices 里，已改为自动选择', self.serial)
+            self._serial_ok = self.serial in online
+            if not self._serial_ok and _is_tcp_serial(self.serial):
+                self._serial_ok = self._connect(self.serial)
+            if not self._serial_ok:
+                logger.warning(
+                    '指定的模拟器 %s 不在 adb devices 里，已改为自动选择', self.serial)
         return self.serial if self._serial_ok is not False else None
 
     def _run(self, args: list[str], timeout: int | None = None
@@ -123,31 +152,53 @@ class DeviceGatewayImpl(DeviceGateway):
 
     # ────────────────────── 设备 ──────────────────────
     def devices(self) -> list[DeviceInfo]:
-        """列出在线设备；刚启动 adb 服务端时短轮询等模拟器注册。
+        """列出可用设备；一台都没有时主动把本地模拟器端口连进 adb server。
 
         Returns:
-            在线设备列表；等到超时仍为空时返回空列表。
-            成功的结果另存一份，供 ``_checked_serial`` / ``_raise_for`` 复用，
-            避免一次取档反复探测。
+            状态为 ``device`` 的设备（带机型，供多开时挑选）。
+
+        Raises:
+            ADBError: 仍然没有可用设备。会区分 offline / 未授权 / 根本没连上，
+                并带上试过的端口与 ``--serial`` 用法。
         """
-        deadline = time.monotonic() + DEVICE_SETTLE_SEC
+        rows = self._settle_rows(DEVICE_SETTLE_SEC)
+        usable = [d for d in rows if d.state == 'device']
+        if not usable and not self._probed:
+            self._probed = True
+            self._connect_candidates()
+            rows = self._settle_rows(CONNECT_SETTLE_SEC)
+            usable = [d for d in rows if d.state == 'device']
+        if usable:
+            return usable
+        raise self._no_device_error(rows)
+
+    def refresh(self) -> None:
+        """忘掉上次的探测结果（设备拔插/重开模拟器后再调）。"""
+        self._serial_ok = None
+        self._probed = False
+        self._last_devices = None
+
+    def _settle_rows(self, settle_sec: float) -> list[DeviceInfo]:
+        """短轮询等模拟器注册，返回原始行（含 offline / unauthorized）。"""
+        deadline = time.monotonic() + settle_sec
         announced = False
         while True:
             try:
-                result = self._list_devices()
+                rows = self._list_devices()
             except ADBError as exc:
                 if time.monotonic() >= deadline:
                     raise
                 logger.debug('adb devices 失败，重试：%s', exc)
-                result = []
+                rows = []
             else:
-                self._last_devices = result
-                if result or time.monotonic() >= deadline:
-                    return result
+                self._last_devices = rows
+                usable = any(d.state == 'device' for d in rows)
+                if usable or time.monotonic() >= deadline:
+                    return rows
             if not announced:
                 announced = True
                 logging.getLogger(PROG).info(
-                    'adb 还没看到设备，等待模拟器注册（最多 %d 秒）…', int(DEVICE_SETTLE_SEC))
+                    'adb 还没看到设备，等待模拟器注册（最多 %d 秒）…', int(settle_sec))
             time.sleep(DEVICE_POLL_SEC)
 
     def _list_devices(self) -> list[DeviceInfo]:
@@ -157,13 +208,81 @@ class DeviceGatewayImpl(DeviceGateway):
         result: list[DeviceInfo] = []
         for line in text.splitlines()[1:]:
             parts = line.split()
-            if len(parts) >= 2 and parts[1] == 'device':
-                result.append(DeviceInfo(serial=parts[0], state='device',
+            if len(parts) >= 2:
+                result.append(DeviceInfo(serial=parts[0], state=parts[1],
                                          model=_field(parts[2:], 'model')))
         return result
 
+    def _candidates(self) -> list[str]:
+        """本次要尝试的 ``host:port``：记住的 serial 优先，再按固定端口表。"""
+        out: list[str] = []
+        if self.serial and _is_tcp_serial(self.serial):
+            out.append(self.serial)
+        out.extend(f'127.0.0.1:{port}' for port in CONNECT_PORTS)
+        return list(dict.fromkeys(out))
+
+    def _connect_candidates(self) -> list[str]:
+        """把能连上的本地模拟器都接进 adb server，返回连上的 serial。"""
+        connected: list[str] = []
+        for serial in self._candidates():
+            if self._connect(serial):
+                connected.append(serial)
+        return connected
+
+    def _connect(self, serial: str) -> bool:
+        """``adb connect host:port``；成功（含已连接）返回 True。"""
+        if not _port_open(serial):
+            return False
+        try:
+            proc = self._run([self.exe, 'connect', serial],
+                             timeout=CONNECT_TIMEOUT_SEC)
+        except (ADBError, ADBTimeout) as exc:
+            logger.debug('连接 %s 失败：%s', serial, exc)
+            return False
+        text = (proc.stdout + proc.stderr).decode('utf-8', 'replace').lower()
+        return 'connected to' in text
+
+    def _reconnect(self) -> None:
+        """adbd 重启后把 TCP 设备接回 adb server（本地设备无副作用）。"""
+        if not self.serial or not _is_tcp_serial(self.serial):
+            return
+        try:
+            self._run([self.exe, 'reconnect', self.serial],
+                      timeout=CONNECT_TIMEOUT_SEC)
+        except (ADBError, ADBTimeout) as exc:
+            logger.debug('reconnect %s 失败：%s', self.serial, exc)
+        if not self._connect(self.serial):
+            logger.debug('重新 connect %s 失败', self.serial)
+
+    @staticmethod
+    def _no_device_error(rows: list[DeviceInfo]) -> ADBError:
+        """把"连不上"细分成未授权 / offline / 没连上，各给各的下一步。"""
+        states = {d.state for d in rows}
+        if 'unauthorized' in states:
+            return ADBError(
+                '模拟器连上了，但没授权本机调试',
+                hints=['在模拟器里勾选“一律允许”并点确定',
+                       '没弹窗就先 adb kill-server，再重新 adb connect'],
+            )
+        if 'offline' in states:
+            return ADBError(
+                '模拟器在 adb 里是 offline',
+                hints=['先执行 adb reconnect offline 再重试',
+                       '还是 offline 就重启模拟器，让它重新注册到 adb'],
+            )
+        tried = '5555–5575 奇数、7555、16384–16640、62001/62025、21503、21513、58526'
+        return ADBError(
+            '没有检测到模拟器',
+            hints=[f'已主动尝试连接 127.0.0.1 的常见模拟器端口：{tried}',
+                   '端口不是这些就用 --serial 指定，'
+                   '例: python run.py local --serial 127.0.0.1:5561',
+                   '模拟器设置里确认“ADB 调试”已打开'],
+        )
+
     def ensure_root(self) -> None:
         """确认 adb shell 是 root，不是就尝试 ``adb root`` 提权。
+
+        adbd 重启会把 TCP 设备踢下线，所以提权后先重连再确认。
 
         Raises:
             ADBError: 提权失败。存档都在 ``/data/data`` 下，非 root 读不到，
@@ -181,13 +300,14 @@ class DeviceGatewayImpl(DeviceGateway):
         if 'cannot run as root' in text or 'not allowed' in text:
             raise ADBError('模拟器不允许 adb root', hint=ROOT_HINT)
 
+        self._reconnect()
         deadline = time.monotonic() + ADBD_RESTART_SEC
         while time.monotonic() < deadline:
             time.sleep(DEVICE_POLL_SEC)
             try:
                 if self._shell_is_root():
                     self._root_ready = True
-                    self.serial = self._checked_serial() or self.serial
+                    self._serial_ok = None
                     return
             except ADBError:
                 continue
@@ -259,6 +379,7 @@ class DeviceGatewayImpl(DeviceGateway):
                     online = self._list_devices()
                 except ADBError:
                     online = []
+            online = [d for d in online if d.state == 'device']
             suffix = f'：{"、".join(d.label for d in online)}' if online else ''
             return MultipleDevices(
                 f'检测到多个模拟器，没指定用哪一个{suffix}',

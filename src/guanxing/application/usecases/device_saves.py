@@ -1,6 +1,7 @@
 """用例：从模拟器定位并取回 dat.db。"""
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections.abc import Callable, Sequence
@@ -15,12 +16,22 @@ from guanxing.shared.progress import ProgressSink
 from ..packs import DeviceStack, StorageStack
 from ..ports.device import DeviceInfo, RemoteFile
 
+logger = logging.getLogger(__name__)
+
 # 临时存档的文件名：``<yyyymmdd-hhmmss>-<包名>.db``（见 pull_save）。
 # 清理时只认这个形状，避免把 cache_dir 里别的东西删掉。
 _CACHE_NAME_RE = re.compile(r'^\d{8}-\d{6}-.+\.db$')
 
 # 临时存档至少留这么久再清：失败提示会让用户马上去看它，不能刚生成就删掉
 CACHE_KEEP_SEC = 60*60*24
+
+
+def _remember(device: DeviceStack, **env: str) -> None:
+    """把这次用顺手的 adb / serial / pkg 记进 keys.local.json，失败不影响取档。"""
+    try:
+        device.remember(**env)
+    except Exception:  # noqa: BLE001 - 记不住环境不该让导入失败
+        logger.warning('记录设备环境失败', exc_info=True)
 
 
 def list_devices(device: DeviceStack) -> list[DeviceInfo]:
@@ -30,8 +41,9 @@ def list_devices(device: DeviceStack) -> list[DeviceInfo]:
         raise AppError(
             '没有检测到模拟器',
             hints=[
-                '确认 MuMu 等模拟器已启动，且 adb devices 能看到它',
-                '找不到 adb 时可设环境变量 启动时添加 --adb 指向 adb.exe',
+                '确认模拟器已启动，且设置里打开了“ADB 调试”',
+                '端口不是默认的就用 --serial 指定（adb devices 可查看已连设备），'
+                '例: python run.py local --serial 127.0.0.1:5561',
             ],
         )
     return devices
@@ -80,6 +92,7 @@ def list_saves(
                 '或者在向导里改用 capture 模式，配合抓包拿到 psw',
             ],
         )
+    _remember(device, pkg=package_of(files[0].path) or wanted)
     return files
 
 
@@ -297,6 +310,7 @@ def fetch_save(device: DeviceStack, storage: StorageStack, *,
         return None
     serial = picked_device.serial
     device.use_serial(serial)      # 之后的内存扫描也用这台，别再让 adb 自己挑
+    _remember(device, serial=serial)
     progress.step('模拟器', picked_device.label)
 
     remote = pick_save(device, serial=serial, package=package,

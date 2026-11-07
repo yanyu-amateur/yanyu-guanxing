@@ -31,6 +31,7 @@ class _FakeADB(DeviceGatewayImpl):
         self.serial = None
         self._serial_ok = None
         self._root_ready = False
+        self._probed = False
         self._last_devices = None
 
     def sh(self, cmd: str, *, timeout: int | None = None,
@@ -124,6 +125,7 @@ class _RootADB(DeviceGatewayImpl):
         self.timeout = 20
         self._serial_ok = True
         self._root_ready = False
+        self._probed = False
         self._last_devices = None
         self.id_outputs = list(id_outputs)
         self.root_output = root_output
@@ -192,6 +194,7 @@ class _SerialADB(DeviceGatewayImpl):
         self.exe_src = 'test'
         self._serial_ok = None
         self._root_ready = False
+        self._probed = False
         self._last_devices = None
         self.calls: list[list[str]] = []
 
@@ -331,3 +334,102 @@ def test_pid_of_returns_none_when_process_absent() -> None:
             return type('P', (), {'returncode': 1, 'stdout': b'', 'stderr': b''})()
 
     assert _NoProcess('emulator-5558', ['emulator-5558']).pid_of('com.x') is None
+
+
+class _ConnectADB(_SerialADB):
+    """模拟器在本地端口上，但 adb server 里还没有它。"""
+
+    def __init__(self, *, alive=('127.0.0.1:5561',),
+                 serial: str | None = None,
+                 states: dict[str, str] | None = None) -> None:
+        super().__init__(serial, [])
+        self.alive = set(alive)
+        self.connected: dict[str, str] = dict(states or {})
+        self.connect_calls: list[str] = []
+
+    def _run(self, args, timeout=None):
+        self.calls.append(list(args))
+        if args[1:2] == ['devices']:
+            rows = ''.join(f'{s}\t{state}\n' for s, state in self.connected.items())
+            return type('P', (), {'returncode': 0,
+                                  'stdout': f'List of devices attached\n{rows}'.encode(),
+                                  'stderr': b''})()
+        if args[1:2] == ['connect']:
+            serial = args[2]
+            self.connect_calls.append(serial)
+            if serial in self.alive:
+                self.connected[serial] = 'device'
+                text = f'connected to {serial}'
+            else:
+                text = f'cannot connect to {serial}: 目标计算机积极拒绝'
+            return type('P', (), {'returncode': 0, 'stdout': text.encode(),
+                                  'stderr': b''})()
+        return type('P', (), {'returncode': 0, 'stdout': b'', 'stderr': b''})()
+
+
+@pytest.fixture
+def fast_settle(monkeypatch):
+    from guanxing.infra.device import adb_client
+
+    monkeypatch.setattr(adb_client, 'DEVICE_SETTLE_SEC', 0.0)
+    monkeypatch.setattr(adb_client, 'CONNECT_SETTLE_SEC', 0.0)
+    monkeypatch.setattr(adb_client, 'DEVICE_POLL_SEC', 0.0)
+    monkeypatch.setattr(adb_client, '_port_open', lambda _serial: True)
+
+
+def test_devices_connects_local_ports_when_list_is_empty(fast_settle) -> None:
+    """重启 adb server 后没人 connect，工具必须自己把模拟器接回来。"""
+    adb = _ConnectADB(alive={'127.0.0.1:5561'})
+
+    assert [d.serial for d in adb.devices()] == ['127.0.0.1:5561']
+    assert adb.connect_calls[0] == '127.0.0.1:5555'
+    assert '127.0.0.1:5561' in adb.connect_calls
+
+
+def test_remembered_serial_is_tried_before_the_port_table(fast_settle) -> None:
+    """上次用的那台优先试，端口表只是兜底。"""
+    adb = _ConnectADB(alive={'127.0.0.1:9999'}, serial='127.0.0.1:9999')
+
+    assert [d.serial for d in adb.devices()] == ['127.0.0.1:9999']
+    assert adb.connect_calls[0] == '127.0.0.1:9999'
+
+
+def test_devices_probes_ports_only_once(fast_settle) -> None:
+    adb = _ConnectADB(alive=set())
+
+    for _ in range(2):
+        with pytest.raises(ADBError):
+            adb.devices()
+
+    assert len(adb.connect_calls) == len(adb_client_ports())
+
+
+def adb_client_ports() -> tuple[int, ...]:
+    from guanxing.infra.device import adb_client
+
+    return adb_client.CONNECT_PORTS
+
+
+def test_no_device_error_lists_tried_ports(fast_settle) -> None:
+    adb = _ConnectADB(alive=set())
+
+    with pytest.raises(ADBError) as err:
+        adb.devices()
+
+    joined = ' '.join(err.value.hints)
+    assert '5555' in joined
+    assert '--serial' in joined
+
+
+@pytest.mark.parametrize('state,expected', [
+    ('unauthorized', '授权'),
+    ('offline', 'offline'),
+])
+def test_device_states_get_their_own_advice(fast_settle, state: str,
+                                           expected: str) -> None:
+    adb = _ConnectADB(alive=set(), states={'127.0.0.1:5555': state})
+
+    with pytest.raises(ADBError) as err:
+        adb.devices()
+
+    assert expected in err.value.message

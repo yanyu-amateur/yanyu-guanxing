@@ -1,6 +1,6 @@
 """keys.json 与 keys.local.json 的版本号与升级，纯函数不碰 IO。
 
-keys.json 无版本号就补、把 1.1 的 inner_keys 拆成 psw 与后缀；keys.local.json 另把
+keys.json 无版本号就补、把旧版 inner_keys 拆成 psw 与后缀；keys.local.json 另把
 outer_keys 并入 outer_keys_by_acc 并保留 adb/serial/pkg。版本过新时抛 KeysFileTooNew。
 """
 from __future__ import annotations
@@ -21,7 +21,6 @@ LOCAL_SCHEMA = 2
 _MANAGED = {'schema_version', 'channel_suffix_table', 'version_psw_table',
             'inner_keys', '_说明'}
 
-# keys.local.json 里与账号无关、跟机器走的环境值（1.1 就有，新版继续认）
 LOCAL_ENV_FIELDS = ('adb', 'serial', 'pkg')
 
 # 前四项由本模块/写入方负责；LOCAL_ENV_FIELDS 原样带过去
@@ -54,7 +53,7 @@ def migrate(
     Args:
         raw: 从 keys.json 读到的原始 dict（可能是 ``{}``）。
         known_suffixes: 已经认识的渠道后缀（一般是内置表 + 内存表）。
-            1.1 条目里的 runtime 只是"在哪个平台破出来的"，同一个后缀不该因此
+            旧版条目里的 runtime 只是"在哪个平台破出来的"，同一个后缀不该因此
             在两张渠道下各登记一份；传进来就能避免这种重复。
     Returns:
         升级结果；``changed`` 为真时调用方应先备份再重写。
@@ -132,7 +131,7 @@ def migrate_local(raw: Mapping[str, Any] | None) -> LocalMigration:
                     bucket.append(key)
         if legacy_acc:
             notes.append(
-                f'已把 1.1 的 outer_keys 并入 outer_keys_by_acc（{len(legacy_acc)} 个账号）')
+                f'已把旧版的 outer_keys 并入 outer_keys_by_acc（{len(legacy_acc)} 个账号）')
     elif legacy is not None:
         # 形状不对时不能装没事——这个文件里是用户自己的外层密钥
         notes.append('outer_keys 不是预期的 {账号: 密钥} 形状，已忽略（原文件已备份）')
@@ -230,7 +229,7 @@ def _absorb_legacy(
     *,
     known: set[str] | None = None,
 ) -> tuple[int, bool]:
-    """把 1.1 的 inner_keys 列表并进 psw 与后缀两张表。
+    """把旧版的 inner_keys 列表并进 psw 与后缀两张表。
 
     Args:
         items: inner_keys 列表。
@@ -240,7 +239,7 @@ def _absorb_legacy(
         known: 已经认识的后缀，用来避免同一后缀重复登记。
     Returns:
         (吸收条数, 是否见过这个字段)。同版本 psw 冲突时保留文件里已有的值；
-        后缀已在任意渠道登记过就不再重复登记，因为 1.1 的 runtime 只表示在哪破出来的。
+        后缀已在任意渠道登记过就不再重复登记，因为旧版 runtime 只表示在哪破出来的。
     """
     if not isinstance(items, (list, tuple)):
         return 0, False
@@ -255,14 +254,14 @@ def _absorb_legacy(
             continue
         old = psows.get(version)
         if old and old != psw:
-            notes.append(f'版本 {version} 的 psw 冲突：保留文件里的 {old}，忽略 1.1 表里的 {psw}')
+            notes.append(f'版本 {version} 的 psw 冲突：保留文件里的 {old}，忽略旧版表里的 {psw}')
         else:
             psows[version] = psw
         if suffix and suffix not in (known or set()) and not _has_suffix(suffixes, suffix):
             suffixes.setdefault(runtime, []).append(suffix)
         absorbed += 1
     if absorbed:
-        notes.append(f'已从 1.1 的 inner_keys 迁移 {absorbed} 条（psw 与渠道后缀已拆开）')
+        notes.append(f'已从旧版 inner_keys 迁移 {absorbed} 条（psw 与渠道后缀已拆开）')
     return absorbed, True
 
 

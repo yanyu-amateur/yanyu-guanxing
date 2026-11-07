@@ -60,9 +60,11 @@ class ADBError(InfraError):
 
     code = "ADB_ERROR"
 
-    def __init__(self, message: str | None = None, hint: str | None = None) -> None:
+    def __init__(self, message: str | None = None, hint: str | None = None,
+                 hints: Sequence[str] = ()) -> None:
         self.hint = hint
-        super().__init__(message, hints=[hint] if hint else ())
+        merged = ([hint] if hint else []) + [h for h in hints if h]
+        super().__init__(message, hints=merged)
 
 
 class MultipleDevices(ADBError):

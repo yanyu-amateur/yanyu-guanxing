@@ -71,6 +71,8 @@ class DeviceStack:
     # 拿不到用例层选出来的设备号，不靠这个回传就会在多开时失败
     use_serial: Callable[[str], None] = field(
         default_factory=lambda: _unbound('use_serial', 'DeviceStack'))
+    remember: Callable[..., None] = field(
+        default_factory=lambda: _unbound('remember', 'DeviceStack'))
 
 
 __all__ = ['CryptoStack', 'DeviceStack', 'StorageStack']

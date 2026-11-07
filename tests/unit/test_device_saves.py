@@ -58,7 +58,8 @@ class FakeDevice:
 
 def _device(gateway) -> packs.DeviceStack:
     return packs.DeviceStack(open_device=lambda **_kw: gateway,
-                             use_serial=lambda _serial: None)
+                             use_serial=lambda _serial: None,
+                             remember=lambda **_kw: None)
 
 
 def _storage(cache_dir: Path) -> packs.StorageStack:
@@ -312,6 +313,7 @@ def _recording_device(gateway, seen: list[str | None],
     return packs.DeviceStack(
         open_device=open_device,
         use_serial=(chosen.append if chosen is not None else lambda _s: None),
+        remember=lambda **_kw: None,
     )
 
 
